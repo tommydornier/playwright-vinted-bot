@@ -1,0 +1,12 @@
+{
+  "name": "playwright-vinted-bot",
+  "version": "1.0.0",
+  "description": "Bot Playwright pour Vinted",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "playwright": "^1.43.0"
+  }
+}
