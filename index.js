@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors'); // <-- Import du module cors
+const cors = require('cors'); // Import du module cors
 const { chromium } = require('playwright');
 const app = express();
 const port = process.env.PORT || 3000;
@@ -9,6 +9,11 @@ app.use(cors());
 
 // Permet de parser le JSON dans le corps des requêtes
 app.use(express.json());
+
+// Route GET de test pour vérifier que l'application fonctionne
+app.get('/', (req, res) => {
+  res.send('Hello from my Express app!');
+});
 
 // Endpoint pour publier l'annonce sur Vinted
 app.post('/publish-ad', async (req, res) => {
@@ -89,7 +94,8 @@ function extractFileName(url) {
   return url.split('/').pop().split('?')[0];
 }
 
-// Démarrer le serveur Express
+// Message de démarrage et lancement du serveur Express
+console.log("=== Mon code Express démarre ===");
 app.listen(port, () => {
   console.log(`Service de publication écoute sur le port ${port}`);
 });
