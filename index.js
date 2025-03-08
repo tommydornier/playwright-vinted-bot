@@ -1,7 +1,11 @@
 const express = require('express');
+const cors = require('cors'); // <-- Import du module cors
 const { chromium } = require('playwright');
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Active CORS pour toutes les routes
+app.use(cors());
 
 // Permet de parser le JSON dans le corps des requêtes
 app.use(express.json());
