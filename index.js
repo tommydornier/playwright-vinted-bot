@@ -1,37 +1,3 @@
-const express = require('express');
-const cors = require('cors'); // Import du module cors
-const { chromium } = require('playwright');
-const app = express();
-const port = process.env.PORT || 3000;
-
-// Active CORS pour toutes les routes
-app.use(cors());
-
-// Permet de parser le JSON dans le corps des requêtes
-app.use(express.json());
-
-// Route GET de test pour vérifier que l'application fonctionne
-app.get('/', (req, res) => {
-  res.send('Hello from my Express app!');
-});
-
-// Endpoint pour publier l'annonce sur Vinted
-app.post('/publish-ad', async (req, res) => {
-  try {
-    const adData = req.body;
-    console.log("Annonce à publier :", adData);
-
-    // Lancer la publication avec Playwright
-    await publishOnVinted(adData);
-
-    res.status(200).json({ message: "Annonce publiée avec succès sur Vinted" });
-  } catch (error) {
-    console.error("Erreur lors de la publication :", error);
-    res.status(500).json({ error: "Erreur lors de la publication sur Vinted" });
-  }
-});
-
-// Fonction qui effectue la publication sur Vinted via Playwright
 async function publishOnVinted(adData) {
   // Lancer Chromium en mode headless
   const browser = await chromium.launch({ headless: true });
@@ -41,61 +7,82 @@ async function publishOnVinted(adData) {
   await page.goto('https://www.vinted.fr/');
   console.log("Page d'accueil Vinted chargée");
 
-  // 2. Cliquer sur "Se connecter" et remplir le formulaire de connexion
-  await page.click('text=Se connecter');
-  await page.fill('input[name="email"]', adData.credentials.email);
-  await page.fill('input[name="password"]', adData.credentials.password);
-  await page.click('button[type="submit"]');
+  // 2. Cliquer sur le bouton "S'inscrire | Se connecter"
+  await page.click('[data-testid="side-bar-signin-btn"]');
+  console.log("Bouton 'S'inscrire | Se connecter' cliqué");
 
-  // Attendre que la connexion soit validée (ex. navigation ou affichage d’un élément spécifique)
+  // 3. Choisir la méthode de connexion en fonction de adData.credentials.method
+  const loginMethod = adData.credentials.method;
+  if (loginMethod === "email") {
+    // Pour se connecter via e-mail, on clique sur le texte "e-mail"
+    await page.click('span:has-text("e-mail")');
+    console.log("Option de connexion par e-mail sélectionnée");
+
+    // Remplir le formulaire de connexion
+    await page.fill('input[name="email"]', adData.credentials.email);
+    await page.fill('input[name="password"]', adData.credentials.password);
+    // Cliquer sur le bouton de soumission (supposé être de type submit)
+    await page.click('button[type="submit"]');
+  } else if (loginMethod === "apple") {
+    // Cliquer sur le bouton "Continuer avec Apple"
+    await page.click('button:has-text("Continuer avec Apple")');
+    console.log("Option de connexion avec Apple sélectionnée");
+    // Ici, le processus de connexion via Apple sera géré par Vinted (souvent avec un redirect)
+    // Tu peux ajouter un waitForNavigation() si nécessaire.
+    await page.waitForNavigation();
+  } else if (loginMethod === "google") {
+    // Cliquer sur le lien "Continuer avec Google"
+    await page.click('a:has-text("Continuer avec Google")');
+    console.log("Option de connexion avec Google sélectionnée");
+    await page.waitForNavigation();
+  } else if (loginMethod === "facebook") {
+    // Cliquer sur le bouton "Continuer avec Facebook"
+    await page.click('button:has-text("Continuer avec Facebook")');
+    console.log("Option de connexion avec Facebook sélectionnée");
+    await page.waitForNavigation();
+  } else {
+    throw new Error("Méthode de connexion non supportée : " + loginMethod);
+  }
+
+  // Attendre que la connexion soit validée (par exemple, en attendant la navigation)
   await page.waitForNavigation();
   console.log("Connexion effectuée");
 
-  // 3. Aller sur la page de création d'annonce
-  await page.goto('https://www.vinted.fr/items/new');
+  // 4. Cliquer sur "Vends tes articles" pour accéder à la page de création d'annonce
+  await page.click('[data-testid="side-bar-sell-btn"]');
+  console.log("Bouton 'Vends tes articles' cliqué");
+
+  // Attendre que la page de création d'annonce soit chargée (par exemple, en attendant le champ titre)
+  await page.waitForSelector('input[name="title"]');
   console.log("Page de création d'annonce chargée");
 
-  // 4. Remplir les champs du formulaire de l'annonce
+  // 5. Remplir les champs du formulaire de l'annonce
   await page.fill('input[name="title"]', adData.title);
   await page.fill('textarea[name="description"]', adData.description);
   await page.fill('input[name="price"]', String(adData.price));
+  console.log("Champs du formulaire remplis");
 
-  // 5. Sélectionner la catégorie (adapté à ton fichier HTML)
-  // Par exemple, si adData.categoryId contient 2525 pour "Duffle-coats"
+  // 6. Sélectionner la catégorie
+  // On utilise ici l'ID pour cliquer sur le bon élément, par exemple "#catalog-2525" pour Duffle-coats
   await page.click(`#catalog-${adData.categoryId}`);
   console.log("Catégorie sélectionnée");
 
-  // 6. Uploader les images
-  // On attend l'ouverture du file chooser après avoir cliqué sur le bouton "Ajoute des photos"
+  // 7. Uploader les images
   const [fileChooser] = await Promise.all([
     page.waitForFileChooser(),
     page.click('button:has-text("Ajoute des photos")')
   ]);
-
-  // On suppose ici que les images sont déjà téléchargées sur le serveur dans /app/images/
-  // La fonction extractFileName permet d'extraire le nom du fichier à partir de l'URL Supabase
   const localImagePaths = adData.imageUrls.map(url => `/app/images/${extractFileName(url)}`);
   await fileChooser.setFiles(localImagePaths);
   console.log("Images uploadées");
 
-  // 7. Soumettre le formulaire de publication
+  // 8. Soumettre le formulaire de publication
   await page.click('button[type="submit"]');
   console.log("Formulaire soumis");
 
-  // 8. Attendre une confirmation de publication (adaptation du sélecteur selon Vinted)
+  // 9. Attendre la confirmation de publication
   await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
   console.log("Annonce publiée sur Vinted !");
 
   await browser.close();
 }
-
-// Fonction utilitaire pour extraire le nom de fichier d'une URL
-function extractFileName(url) {
-  return url.split('/').pop().split('?')[0];
-}
-
-// Message de démarrage et lancement du serveur Express
-console.log("=== Mon code Express démarre ===");
-app.listen(port, () => {
-  console.log(`Service de publication écoute sur le port ${port}`);
-});
