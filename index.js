@@ -14,8 +14,7 @@ async function publishOnVinted(adData) {
 
   // Extraire et transformer les données
   const title = listing.title;
-  // Utilise la description générée (ou concatène avec generatedHashtags si besoin)
-  const description = listing.generatedDescription; 
+  const description = listing.generatedDescription; // ou concaténer avec generatedHashtags si besoin
   const price = Number(listing.price);
   const categoryName = listing.category; // Par exemple "Duffle-coats"
   const categoryId = categoryMapping[categoryName];
@@ -79,7 +78,7 @@ async function publishOnVinted(adData) {
     throw new Error("Méthode de connexion non supportée : " + credentials.method);
   }
 
-  // 4. Attendre la validation de la connexion
+  // 4. Attendre que la connexion soit validée
   console.log("Attente de la validation de la connexion...");
   await page.waitForNavigation();
   console.log("Connexion effectuée");
@@ -89,7 +88,7 @@ async function publishOnVinted(adData) {
   await page.click('[data-testid="side-bar-sell-btn"]');
   console.log("Bouton 'Vends tes articles' cliqué");
 
-  // 6. Attendre que la page de création d'annonce soit chargée (exemple : champ titre)
+  // 6. Attendre que la page de création d'annonce soit chargée (exemple : champ 'Titre')
   console.log("Attente du chargement de la page de création d'annonce...");
   await page.waitForSelector('input[name="title"]');
   console.log("Page de création d'annonce chargée");
