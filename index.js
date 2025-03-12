@@ -15,7 +15,6 @@ async function publishOnVinted(adData) {
   const listing = adData.listing;
 
   // Mapping complet des catégories Vinted
-  // Les clés doivent correspondre exactement aux valeurs envoyées par Jarvis dans listing.category
   const categoryMapping = {
     "Femmes": 1904,
     "Femmes > Vêtements": 4,
@@ -483,7 +482,6 @@ async function publishOnVinted(adData) {
     "Hommes > Soins > Accessoires > Autres cosmétiques": 968
   };
 
-  // Extraire et transformer les données
   const title = listing.title;
   const description = listing.generatedDescription;
   const price = Number(listing.price);
@@ -494,9 +492,8 @@ async function publishOnVinted(adData) {
   }
   const imageUrls = listing.images;
 
-  // Utiliser les credentials envoyés par Jarvis (dans l'objet user)
   const credentials = {
-    method: user.authProvider, // ex. "google", "apple", "facebook", "email"
+    method: user.authProvider,
     email: user.email,
     password: user.password
   };
