@@ -501,21 +501,25 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    console.log("Lancement du navigateur...");
+    // Option : augmenter le timeout par défaut pour toute la page
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
+    page.setDefaultTimeout(60000);
 
     console.log("Navigation vers https://www.vinted.fr/ ...");
     await page.goto('https://www.vinted.fr/');
     console.log("Page d'accueil Vinted chargée");
 
-    console.log("Clic sur le bouton 'S'inscrire | Se connecter'...");
+    console.log("Attente du bouton 'S'inscrire | Se connecter'...");
+    await page.waitForSelector('[data-testid="side-bar-signin-btn"]', { timeout: 60000 });
+    console.log("Bouton trouvé, clic sur 'S'inscrire | Se connecter'...");
     await page.click('[data-testid="side-bar-signin-btn"]');
     console.log("Bouton 'S'inscrire | Se connecter' cliqué");
 
     console.log("Méthode de connexion demandée :", credentials.method);
     if (credentials.method === "email") {
       console.log("Sélection de l'option 'e-mail'...");
+      await page.waitForSelector('span:has-text("e-mail")', { timeout: 60000 });
       await page.click('span:has-text("e-mail")');
       console.log("Option de connexion par e-mail sélectionnée");
 
@@ -569,7 +573,7 @@ async function publishOnVinted(adData) {
 
     console.log("Ouverture du file chooser pour uploader les images...");
     const [fileChooser] = await Promise.all([
-      page.waitForFileChooser(),
+      page.waitForFileChooser({ timeout: 60000 }),
       page.click('button:has-text("Ajoute des photos")')
     ]);
     const localImagePaths = imageUrls.map(url => {
