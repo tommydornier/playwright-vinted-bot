@@ -604,4 +604,21 @@ function extractFileName(url) {
   return fileName;
 }
 
-module.exports = { publishOnVinted };
+app.post('/publish-ad', async (req, res) => {
+  // Répondre immédiatement avec un statut 202 Accepted
+  res.status(202).json({ message: "Job de publication reçu et en cours de traitement" });
+
+  // Lancer la publication en arrière-plan
+  publishOnVinted(req.body)
+    .then(() => {
+      console.log("Publication terminée avec succès");
+    })
+    .catch((error) => {
+      console.error("Erreur lors de la publication en arrière-plan :", error);
+      // Vous pouvez notifier via une autre méthode si besoin
+    });
+});
+
+app.listen(port, () => {
+  console.log(`Service de publication écoute sur le port ${port}`);
+});
