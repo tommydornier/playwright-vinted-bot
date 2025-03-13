@@ -501,13 +501,10 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    // Lancement du navigateur en mode non-headless avec un ralentissement pour observer les actions
-    const browser = await chromium.launch({ headless: false, slowMo: 50 });
+    // Option : augmenter le timeout par défaut pour toute la page
+    const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
-
-    // Afficher les logs de la console du navigateur dans le terminal
-    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
 
     console.log("Navigation vers https://www.vinted.fr/ ...");
     await page.goto('https://www.vinted.fr/');
@@ -622,6 +619,7 @@ app.post('/publish-ad', async (req, res) => {
     })
     .catch((error) => {
       console.error("Erreur lors de la publication en arrière-plan :", error);
+      // Vous pouvez notifier via une autre méthode si besoin
     });
 });
 
