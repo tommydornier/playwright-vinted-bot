@@ -623,14 +623,4 @@ app.post('/publish-ad', async (req, res) => {
   // Lancer la publication en arrière-plan
   publishOnVinted(req.body)
     .then(() => {
-      console.log("Publication terminée avec succès");
-    })
-    .catch((error) => {
-      console.error("Erreur lors de la publication en arrière-plan :", error);
-      // Vous pouvez notifier via une autre méthode si besoin
-    });
-});
-
-app.listen(port, () => {
-  console.log(`Service de publication écoute sur le port ${port}`);
-});
+      console.log("Publication terminée avec succès");});
