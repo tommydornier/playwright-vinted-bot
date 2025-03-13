@@ -501,25 +501,14 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    // Lancer le navigateur en mode non-headless avec slowMo pour débogage
-    const browser = await chromium.launch({ headless: false, slowMo: 100 });
+    // Option : augmenter le timeout par défaut pour toute la page
+    const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
-
-    // Attacher un listener pour les logs du navigateur
-    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
 
     console.log("Navigation vers https://www.vinted.fr/ ...");
     await page.goto('https://www.vinted.fr/');
     console.log("Page d'accueil Vinted chargée");
-
-    // Capture d'écran pour vérifier l'état de la page
-    await page.screenshot({ path: 'page-accueil.png' });
-    console.log("Capture d'écran prise : page-accueil.png");
-
-    // Afficher un extrait du contenu HTML de la page pour vérifier la présence du sélecteur
-    const content = await page.content();
-    console.log("Extrait du HTML de la page :", content.substring(0, 500));
 
     console.log("Attente du bouton 'S'inscrire | Se connecter'...");
     await page.waitForSelector('[data-testid="side-bar-signin-btn"]', { timeout: 60000 });
