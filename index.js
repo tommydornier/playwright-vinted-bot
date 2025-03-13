@@ -462,7 +462,7 @@ async function publishOnVinted(adData) {
     "Hommes > Accessoires > Bijoux > Bagues": 242,
     "Hommes > Accessoires > Bijoux > Autres": 244,
     "Hommes > Accessoires > Pochettes de costume": 2957,
-    "Hommes > Accessoires > Écharpes et casquettes": 87,
+    "Hommes > Accessoires > Écharpes et châles": 87,
     "Hommes > Accessoires > Lunettes de soleil": 98,
     "Hommes > Accessoires > Cravates et noeuds papillons": 2956,
     "Hommes > Accessoires > Montres": 97,
@@ -501,26 +501,18 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    // Lancer le navigateur en mode headless (modifiez headless à false pour du débogage visuel)
+    // Augmenter le timeout par défaut
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
 
     console.log("Navigation vers https://www.vinted.fr/ ...");
-    await page.goto('https://www.vinted.fr/', { waitUntil: 'networkidle' });
+    await page.goto('https://www.vinted.fr/');
     console.log("Page d'accueil Vinted chargée");
 
-    // Tentative d'attente et de vérification du bouton de connexion
     console.log("Attente du bouton 'S'inscrire | Se connecter'...");
-    try {
-      await page.waitForSelector('[data-testid="side-bar-signin-btn"]', { timeout: 60000 });
-      console.log("Bouton trouvé, clic sur 'S'inscrire | Se connecter'...");
-    } catch (error) {
-      console.error("Le bouton 'S'inscrire | Se connecter' n'a pas été trouvé après 60s.");
-      // Capture d'écran pour le débogage
-      await page.screenshot({ path: 'debug-signin-button.png' });
-      throw error;
-    }
+    await page.waitForSelector('[data-testid="side-bar-signin-btn"]', { timeout: 60000 });
+    console.log("Bouton trouvé, clic sur 'S'inscrire | Se connecter'...");
     await page.click('[data-testid="side-bar-signin-btn"]');
     console.log("Bouton 'S'inscrire | Se connecter' cliqué");
 
@@ -538,9 +530,34 @@ async function publishOnVinted(adData) {
       await page.click('button[type="submit"]');
     } else if (credentials.method === "apple") {
       console.log("Sélection de l'option 'Continuer avec Apple'...");
-      await page.click('button:has-text("Continuer avec Apple")');
-      console.log("Option de connexion avec Apple sélectionnée");
-      await page.waitForNavigation();
+      // Cliquer et attendre l'ouverture de la popup Apple
+      const [applePopup] = await Promise.all([
+        browser.waitForEvent('page'),
+        page.click('button:has-text("Continuer avec Apple")')
+      ]);
+      console.log("Fenêtre de connexion Apple détectée");
+      await applePopup.waitForLoadState();
+
+      console.log("Remplissage du formulaire de connexion Apple...");
+      await applePopup.fill('input[type="email"]', credentials.email);
+      await applePopup.fill('input[type="password"]', credentials.password);
+      console.log("Envoi du formulaire Apple...");
+      await applePopup.click('button:has-text("Se connecter")');
+
+      // Une fois les identifiants soumis, une nouvelle page de confirmation s'ouvre
+      console.log("Attente de l'ouverture de la page de confirmation Apple...");
+      const [confirmationPage] = await Promise.all([
+        browser.waitForEvent('page'),
+        applePopup.waitForNavigation({ timeout: 60000 })
+      ]);
+      await confirmationPage.waitForLoadState();
+      console.log("Page de confirmation Apple chargée, clic sur 'Continuer'...");
+      await confirmationPage.click('button:has-text("Continuer")');
+      console.log("Bouton 'Continuer' cliqué sur la page de confirmation Apple");
+      await confirmationPage.close();
+      console.log("Page de confirmation Apple fermée, retour sur la page principale Vinted...");
+      await page.waitForNavigation({ timeout: 60000 });
+      console.log("Connexion Apple finalisée");
     } else if (credentials.method === "google") {
       console.log("Sélection de l'option 'Continuer avec Google'...");
       await page.click('a:has-text("Continuer avec Google")');
@@ -623,4 +640,13 @@ app.post('/publish-ad', async (req, res) => {
   // Lancer la publication en arrière-plan
   publishOnVinted(req.body)
     .then(() => {
-      console.log("Publication terminée avec succès");});
+      console.log("Publication terminée avec succès");
+    })
+    .catch((error) => {
+      console.error("Erreur lors de la publication en arrière-plan :", error);
+    });
+});
+
+app.listen(port, () => {
+  console.log(`Service de publication écoute sur le port ${port}`);
+});
