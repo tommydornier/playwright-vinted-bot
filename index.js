@@ -462,7 +462,7 @@ async function publishOnVinted(adData) {
     "Hommes > Accessoires > Bijoux > Bagues": 242,
     "Hommes > Accessoires > Bijoux > Autres": 244,
     "Hommes > Accessoires > Pochettes de costume": 2957,
-    "Hommes > Accessoires > Écharpes et châles": 87,
+    "Hommes > Accessoires > Écharpes et casquettes": 87,
     "Hommes > Accessoires > Lunettes de soleil": 98,
     "Hommes > Accessoires > Cravates et noeuds papillons": 2956,
     "Hommes > Accessoires > Montres": 97,
@@ -501,18 +501,26 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    // Option : augmenter le timeout par défaut pour toute la page
+    // Lancer le navigateur en mode headless (modifiez headless à false pour du débogage visuel)
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
 
     console.log("Navigation vers https://www.vinted.fr/ ...");
-    await page.goto('https://www.vinted.fr/');
+    await page.goto('https://www.vinted.fr/', { waitUntil: 'networkidle' });
     console.log("Page d'accueil Vinted chargée");
 
+    // Tentative d'attente et de vérification du bouton de connexion
     console.log("Attente du bouton 'S'inscrire | Se connecter'...");
-    await page.waitForSelector('[data-testid="side-bar-signin-btn"]', { timeout: 60000 });
-    console.log("Bouton trouvé, clic sur 'S'inscrire | Se connecter'...");
+    try {
+      await page.waitForSelector('[data-testid="side-bar-signin-btn"]', { timeout: 60000 });
+      console.log("Bouton trouvé, clic sur 'S'inscrire | Se connecter'...");
+    } catch (error) {
+      console.error("Le bouton 'S'inscrire | Se connecter' n'a pas été trouvé après 60s.");
+      // Capture d'écran pour le débogage
+      await page.screenshot({ path: 'debug-signin-button.png' });
+      throw error;
+    }
     await page.click('[data-testid="side-bar-signin-btn"]');
     console.log("Bouton 'S'inscrire | Se connecter' cliqué");
 
