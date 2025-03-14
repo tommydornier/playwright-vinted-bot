@@ -501,9 +501,8 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    // Lancement du navigateur en mode non-headless, slowMo et devtools activés pour visualiser les actions.
-    // Remarque : Si vous exécutez ce code sur un serveur sans XServer, utilisez xvfb-run ou passez headless à true.
-    const browser = await chromium.launch({ headless: false, slowMo: 1000, devtools: true });
+    // Option : augmenter le timeout par défaut pour toute la page
+    const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
 
@@ -533,13 +532,6 @@ async function publishOnVinted(adData) {
       console.log("Sélection de l'option 'Continuer avec Apple'...");
       await page.click('button:has-text("Continuer avec Apple")');
       console.log("Option de connexion avec Apple sélectionnée");
-      // Attendre que la fenêtre de confirmation Apple apparaisse
-      await page.waitForNavigation();
-      console.log("Nouvelle page Apple détectée pour confirmation de connexion");
-      // Simuler un clic sur le bouton "Continuer" dans la fenêtre Apple
-      await page.click('button:has-text("Continuer")');
-      console.log("Bouton 'Continuer' cliqué dans la fenêtre Apple");
-      // Attendre que la page Apple se ferme et que nous revenions sur Vinted
       await page.waitForNavigation();
     } else if (credentials.method === "google") {
       console.log("Sélection de l'option 'Continuer avec Google'...");
