@@ -8,8 +8,8 @@ app.use(cors());
 app.use(express.json());
 
 async function handleAppleLogin(page, context, credentials) {
-  console.log("Sélection de l'option 'Continuer avec Apple'...");
-  // Clique sur le bouton et attend le nouvel onglet
+  console.log("Gestion de la connexion via Apple...");
+  // Clique sur le bouton "Continuer avec Apple" et attend le nouvel onglet
   const [applePage] = await Promise.all([
     context.waitForEvent('page', { timeout: 60000 }),
     page.waitForSelector('button:has-text("Continuer avec Apple")', { state: 'visible', timeout: 60000 }),
@@ -17,26 +17,30 @@ async function handleAppleLogin(page, context, credentials) {
   ]);
   console.log("Nouvel onglet Apple détecté");
   await applePage.waitForLoadState('domcontentloaded');
-  
-  // Remplissage du formulaire de connexion Apple avec les nouveaux sélecteurs
-  console.log("Attente du champ e-mail...");
+
+  // Attente et remplissage du champ e-mail
+  console.log("Attente du champ e-mail dans l'onglet Apple...");
   await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
   console.log("Champ e-mail détecté, remplissage...");
   await applePage.fill('#account_name_text_field', credentials.email);
-  
-  console.log("Clique sur le bouton pour valider l'e-mail...");
-  // Adapte le sélecteur du bouton "Continuer" si nécessaire
+
+  // Clique sur le bouton "Continuer" (pour l'e-mail)
+  console.log("Clique sur le bouton 'Continuer' pour valider l'e-mail...");
+  await applePage.waitForSelector('button:has-text("Continuer")', { state: 'visible', timeout: 60000 });
   await applePage.click('button:has-text("Continuer")');
-  
-  console.log("Attente du champ mot de passe...");
+
+  // Attente et remplissage du champ mot de passe
+  console.log("Attente du champ mot de passe dans l'onglet Apple...");
   await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
   console.log("Champ mot de passe détecté, remplissage...");
   await applePage.fill('#password_text_field', credentials.password);
-  
+
+  // Clique sur le bouton "Se connecter"
   console.log("Clique sur le bouton 'Se connecter'...");
-  // Adapte le sélecteur du bouton "Se connecter" si nécessaire
+  await applePage.waitForSelector('button:has-text("Se connecter")', { state: 'visible', timeout: 60000 });
   await applePage.click('button:has-text("Se connecter")');
-  
+
+  // Attendre que la connexion soit traitée (le réseau devient inactif)
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
   await applePage.close();
@@ -571,29 +575,7 @@ async function publishOnVinted(adData) {
       console.log("Envoi du formulaire de connexion...");
       await page.click('button[type="submit"]');
     } else if (credentials.method === "apple") {
-      console.log("Gestion de la connexion via Apple...");
-      const context = page.context();
-      const [applePage] = await Promise.all([
-        context.waitForEvent('page', { timeout: 60000 }),
-        page.waitForSelector('button:has-text("Continuer avec Apple")', { state: 'visible', timeout: 60000 }),
-        page.click('button:has-text("Continuer avec Apple")')
-      ]);
-      console.log("Nouvel onglet Apple détecté");
-      await applePage.waitForLoadState('domcontentloaded');
-      console.log("Attente du champ e-mail dans l'onglet Apple...");
-      await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
-      await applePage.fill('#account_name_text_field', credentials.email);
-      console.log("Clique sur le bouton 'Continuer' pour l'e-mail...");
-      await applePage.click('button:has-text("Continuer")');
-      
-      console.log("Attente du champ mot de passe...");
-      await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
-      await applePage.fill('#password_text_field', credentials.password);
-      console.log("Clique sur le bouton 'Se connecter'...");
-      await applePage.click('button:has-text("Se connecter")');
-      await applePage.waitForLoadState('networkidle');
-      console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
-      await applePage.close();
+      await handleAppleLogin(page, page.context(), credentials);
     } else if (credentials.method === "google") {
       console.log("Sélection de l'option 'Continuer avec Google'...");
       await page.waitForSelector('a:has-text("Continuer avec Google")', { state: 'visible', timeout: 60000 });
