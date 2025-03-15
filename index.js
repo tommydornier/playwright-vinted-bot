@@ -510,7 +510,6 @@ async function publishOnVinted(adData) {
     console.log("Page d'accueil Vinted chargée");
 
     console.log("Recherche du bouton 'S'inscrire | Se connecter'...");
-    // Correction du sélecteur : utilisation de locator avec filtre par texte
     const signInButton = page.locator('[data-testid="side-bar-signin-btn"]').filter({ hasText: "S'inscrire | Se connecter" });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
     console.log("Bouton détecté, clic sur 'S'inscrire | Se connecter'...");
@@ -609,6 +608,7 @@ function extractFileName(url) {
 }
 
 app.post('/publish-ad', async (req, res) => {
+  // Répondre immédiatement avec un statut 202 Accepted
   res.status(202).json({ message: "Job de publication reçu et en cours de traitement" });
   publishOnVinted(req.body)
     .then(() => console.log("Publication terminée avec succès"))
