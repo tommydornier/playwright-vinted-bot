@@ -7,40 +7,42 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+// Fonction pour gérer la connexion via Apple
 async function handleAppleLogin(page, context, credentials) {
   console.log("Gestion de la connexion via Apple...");
-  // Clique sur le bouton "Continuer avec Apple" et attend le nouvel onglet
+
+  // Clique sur le bouton "Continuer avec Apple" et attend l'ouverture du nouvel onglet
   const [applePage] = await Promise.all([
     context.waitForEvent('page', { timeout: 60000 }),
     page.waitForSelector('button:has-text("Continuer avec Apple")', { state: 'visible', timeout: 60000 }),
     page.click('button:has-text("Continuer avec Apple")')
   ]);
   console.log("Nouvel onglet Apple détecté");
+
+  // Attendre que la page soit chargée
   await applePage.waitForLoadState('domcontentloaded');
 
-  // Attente et remplissage du champ e-mail
+  // Remplir le champ e-mail
   console.log("Attente du champ e-mail dans l'onglet Apple...");
   await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
-  console.log("Champ e-mail détecté, remplissage...");
   await applePage.fill('#account_name_text_field', credentials.email);
 
-  // Clique sur le bouton "Continuer" (pour l'e-mail)
-  console.log("Clique sur le bouton 'Continuer' pour valider l'e-mail...");
-  await applePage.waitForSelector('button:has-text("Continuer")', { state: 'visible', timeout: 60000 });
-  await applePage.click('button:has-text("Continuer")');
+  // Cliquer sur le bouton "Continuer" (via aria-label="Continuer")
+  console.log("Clique sur le bouton 'Continuer' (flèche pour l'e-mail)...");
+  await applePage.waitForSelector('button[aria-label="Continuer"]', { timeout: 60000 });
+  await applePage.click('button[aria-label="Continuer"]');
 
-  // Attente et remplissage du champ mot de passe
-  console.log("Attente du champ mot de passe dans l'onglet Apple...");
+  // Remplir le champ mot de passe
+  console.log("Attente du champ mot de passe...");
   await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
-  console.log("Champ mot de passe détecté, remplissage...");
   await applePage.fill('#password_text_field', credentials.password);
 
-  // Clique sur le bouton "Se connecter"
-  console.log("Clique sur le bouton 'Se connecter'...");
-  await applePage.waitForSelector('button:has-text("Se connecter")', { state: 'visible', timeout: 60000 });
-  await applePage.click('button:has-text("Se connecter")');
+  // Cliquer sur le bouton "Se connecter" (via aria-label="Se connecter")
+  console.log("Clique sur le bouton 'Se connecter' (flèche pour le mot de passe)...");
+  await applePage.waitForSelector('button[aria-label="Se connecter"]', { timeout: 60000 });
+  await applePage.click('button[aria-label="Se connecter"]');
 
-  // Attendre que la connexion soit traitée (le réseau devient inactif)
+  // Attendre la fin du chargement (réseau inactif) puis fermer l'onglet
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
   await applePage.close();
@@ -49,7 +51,7 @@ async function handleAppleLogin(page, context, credentials) {
 async function publishOnVinted(adData) {
   console.log("Début de publishOnVinted avec les données reçues :", adData);
 
-  // Extraire les données du JSON envoyé par Jarvis
+  // Extraire les données du JSON envoyé
   const user = adData.user;
   const listing = adData.listing;
 
@@ -540,6 +542,7 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
+    // Lance le navigateur
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
@@ -554,6 +557,8 @@ async function publishOnVinted(adData) {
     });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
     console.log("Bouton détecté, déclenchement du clic via evaluate...");
+
+    // Déclencher le clic via evaluate pour lancer le modal
     await page.evaluate(() => {
       document.querySelector('[data-testid="header--login-button"]').click();
     });
@@ -575,7 +580,10 @@ async function publishOnVinted(adData) {
       console.log("Envoi du formulaire de connexion...");
       await page.click('button[type="submit"]');
     } else if (credentials.method === "apple") {
-      await handleAppleLogin(page, page.context(), credentials);
+      // Gestion du nouvel onglet Apple
+      const context = page.context();
+      await handleAppleLogin(page, context, credentials);
+
     } else if (credentials.method === "google") {
       console.log("Sélection de l'option 'Continuer avec Google'...");
       await page.waitForSelector('a:has-text("Continuer avec Google")', { state: 'visible', timeout: 60000 });
@@ -641,6 +649,7 @@ async function publishOnVinted(adData) {
     console.log("Fermeture du navigateur...");
     await browser.close();
     console.log("Processus de publication terminé avec succès");
+
   } catch (err) {
     console.error("Erreur dans publishOnVinted :", err);
     throw err;
