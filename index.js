@@ -7,10 +7,8 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Fonction pour gérer la connexion via Apple
 async function handleAppleLogin(page, context, credentials) {
   console.log("Gestion de la connexion via Apple...");
-
   // Clique sur "Continuer avec Apple" et attend l'ouverture d'un nouvel onglet
   const [applePage] = await Promise.all([
     context.waitForEvent('page', { timeout: 60000 }),
@@ -18,31 +16,40 @@ async function handleAppleLogin(page, context, credentials) {
     page.click('button:has-text("Continuer avec Apple")')
   ]);
   console.log("Nouvel onglet Apple détecté");
-
-  // Attendre que la page ait chargé son contenu HTML
   await applePage.waitForLoadState('domcontentloaded');
 
-  // 1) Remplir le champ e-mail
+  // Remplissage du champ e-mail
   console.log("Attente du champ e-mail dans l'onglet Apple...");
   await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
   await applePage.fill('#account_name_text_field', credentials.email);
 
-  // 2) Cliquer sur le bouton « Continuer » (id="sign-in" + aria-label="Continuer")
-  console.log('Clique sur le bouton [aria-label="Continuer"]...');
-  await applePage.waitForSelector('button#sign-in[aria-label="Continuer"]', { timeout: 60000 });
-  await applePage.click('button#sign-in[aria-label="Continuer"]');
+  // Attendre un court délai pour s'assurer que le bouton est bien affiché
+  await applePage.waitForTimeout(500);
 
-  // 3) Remplir le champ mot de passe
-  console.log("Attente du champ mot de passe...");
+  // Cliquer sur le bouton "Continuer" (basé sur aria-label uniquement)
+  console.log("Recherche et clic sur le bouton 'Continuer'...");
+  const continueButton = applePage.locator('button[aria-label="Continuer"]');
+  await continueButton.waitFor({ state: 'visible', timeout: 60000 });
+  await continueButton.click();
+
+  // Attendre un délai pour la transition
+  await applePage.waitForTimeout(500);
+
+  // Remplissage du champ mot de passe
+  console.log("Attente du champ mot de passe dans l'onglet Apple...");
   await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
   await applePage.fill('#password_text_field', credentials.password);
 
-  // 4) Cliquer sur le bouton « Se connecter » (id="sign-in" + aria-label="Se connecter")
-  console.log('Clique sur le bouton [aria-label="Se connecter"]...');
-  await applePage.waitForSelector('button#sign-in[aria-label="Se connecter"]', { timeout: 60000 });
-  await applePage.click('button#sign-in[aria-label="Se connecter"]');
+  // Attendre un court délai avant de cliquer sur "Se connecter"
+  await applePage.waitForTimeout(500);
 
-  // Attendre la fin des requêtes réseau avant de fermer l'onglet
+  // Cliquer sur le bouton "Se connecter" (basé sur aria-label uniquement)
+  console.log("Recherche et clic sur le bouton 'Se connecter'...");
+  const loginButton = applePage.locator('button[aria-label="Se connecter"]');
+  await loginButton.waitFor({ state: 'visible', timeout: 60000 });
+  await loginButton.click();
+
+  // Attendre que le nouvel onglet ait terminé ses requêtes réseau
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
   await applePage.close();
@@ -51,11 +58,11 @@ async function handleAppleLogin(page, context, credentials) {
 async function publishOnVinted(adData) {
   console.log("Début de publishOnVinted avec les données reçues :", adData);
 
-  // Extraire les données du JSON
+  // Extraire les données du JSON envoyé par Jarvis
   const user = adData.user;
   const listing = adData.listing;
 
-  // Mapping complet des catégories Vinted
+// Mapping complet des catégories Vinted
   const categoryMapping = {
     "Femmes": 1904,
     "Femmes > Vêtements": 4,
@@ -542,17 +549,14 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    // Lance Playwright
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
 
-    // Aller sur Vinted
     console.log("Navigation vers https://www.vinted.fr/ ...");
     await page.goto('https://www.vinted.fr/');
     console.log("Page d'accueil Vinted chargée");
 
-    // Cliquer sur "S'inscrire | Se connecter" via evaluate (pour éviter l'interception du clic)
     console.log("Recherche du bouton 'S'inscrire | Se connecter'...");
     const signInButton = page.locator('[data-testid="header--login-button"]').filter({
       hasText: "S'inscrire | Se connecter"
@@ -563,12 +567,10 @@ async function publishOnVinted(adData) {
       document.querySelector('[data-testid="header--login-button"]').click();
     });
 
-    // Attendre l'apparition du modal
     console.log("Attente de l'apparition du modal d'authentification...");
     await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
     console.log("Modal d'authentification détecté");
 
-    // Gestion de la connexion selon la méthode
     console.log("Méthode de connexion demandée :", credentials.method);
     if (credentials.method === "email") {
       console.log("Sélection de l'option 'e-mail'...");
@@ -582,10 +584,8 @@ async function publishOnVinted(adData) {
       console.log("Envoi du formulaire de connexion...");
       await page.click('button[type="submit"]');
     } else if (credentials.method === "apple") {
-      // Gestion de l'onglet Apple
       const context = page.context();
       await handleAppleLogin(page, context, credentials);
-
     } else if (credentials.method === "google") {
       console.log("Sélection de l'option 'Continuer avec Google'...");
       await page.waitForSelector('a:has-text("Continuer avec Google")', { state: 'visible', timeout: 60000 });
@@ -602,12 +602,10 @@ async function publishOnVinted(adData) {
       throw new Error("Méthode de connexion non supportée : " + credentials.method);
     }
 
-    // Attendre l'affichage du bouton "Vends tes articles" comme preuve de connexion réussie
     console.log("Attente que le bouton 'Vends tes articles' soit visible...");
     await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { state: 'visible', timeout: 60000 });
     console.log("Connexion effectuée avec succès");
 
-    // Lancer la création d'annonce
     console.log("Clic sur le bouton 'Vends tes articles'...");
     await page.click('[data-testid="side-bar-sell-btn"]');
     console.log("Bouton 'Vends tes articles' cliqué");
@@ -653,7 +651,6 @@ async function publishOnVinted(adData) {
     console.log("Fermeture du navigateur...");
     await browser.close();
     console.log("Processus de publication terminé avec succès");
-
   } catch (err) {
     console.error("Erreur dans publishOnVinted :", err);
     throw err;
