@@ -514,8 +514,11 @@ async function publishOnVinted(adData) {
       hasText: "S'inscrire | Se connecter"
     });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
-    console.log("Bouton détecté, clic sur 'S'inscrire | Se connecter'...");
-    await signInButton.click(); // Clic naturel pour déclencher le modal
+    console.log("Bouton détecté, déclenchement du clic via evaluate...");
+    // Utilise evaluate pour déclencher l'événement click directement
+    await page.evaluate(() => {
+      document.querySelector('[data-testid="header--login-button"]').click();
+    });
 
     console.log("Attente de l'apparition du modal d'authentification...");
     await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
