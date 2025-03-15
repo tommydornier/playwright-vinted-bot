@@ -493,7 +493,7 @@ async function publishOnVinted(adData) {
   const imageUrls = listing.images;
 
   const credentials = {
-    method: user.authProvider, // "email", "apple", "google", "facebook"
+    method: user.authProvider,  // "email", "apple", "google", "facebook"
     email: user.email,
     password: user.password
   };
@@ -509,30 +509,29 @@ async function publishOnVinted(adData) {
     await page.goto('https://www.vinted.fr/');
     console.log("Page d'accueil Vinted chargée");
 
-    // Mise à jour du sélecteur du bouton "Se connecter" (nouvel attribut data-testid)
+    // Cliquer sur le bouton "S'inscrire | Se connecter"
     console.log("Recherche du bouton 'S'inscrire | Se connecter'...");
-    const signInButton = page.locator('[data-testid="header--login-button"]').filter({
+    const signInButton = page.locator('[data-testid="header--login-button"]').filter({ 
       hasText: "S'inscrire | Se connecter"
     });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
     console.log("Bouton détecté, clic sur 'S'inscrire | Se connecter'...");
     await signInButton.click();
 
-    // Attendre l'apparition du modal de connexion (overlay)
-    console.log("Attente de l'apparition du modal de connexion...");
+    // Attendre que le modal d'authentification apparaisse
+    console.log("Attente de l'apparition du modal d'authentification...");
     await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
-    console.log("Modal de connexion détecté");
+    console.log("Modal d'authentification détecté");
 
     // Choisir la méthode de connexion dans le modal
     console.log("Méthode de connexion demandée :", credentials.method);
     if (credentials.method === "email") {
       console.log("Sélection de l'option 'e-mail'...");
-      // Le bouton pour l'option e-mail est contenu dans un span avec data-testid "auth-select-type--login-email"
       await page.waitForSelector('[data-testid="auth-select-type--login-email"]', { state: 'visible', timeout: 60000 });
       await page.click('[data-testid="auth-select-type--login-email"]');
       console.log("Option 'e-mail' sélectionnée");
 
-      console.log("Remplissage du formulaire de connexion...");
+      console.log("Remplissage du formulaire e-mail / mot de passe...");
       await page.fill('input[name="email"]', credentials.email);
       await page.fill('input[name="password"]', credentials.password);
       console.log("Envoi du formulaire de connexion...");
