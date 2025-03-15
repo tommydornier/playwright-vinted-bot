@@ -514,11 +514,8 @@ async function publishOnVinted(adData) {
       hasText: "S'inscrire | Se connecter"
     });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
-    console.log("Bouton détecté, déclenchement du clic via evaluate...");
-    // Utilise evaluate pour déclencher l'événement click directement
-    await page.evaluate(() => {
-      document.querySelector('[data-testid="header--login-button"]').click();
-    });
+    console.log("Bouton détecté, clic sur 'S'inscrire | Se connecter'...");
+    await signInButton.click(); // Clic naturel pour déclencher le modal
 
     console.log("Attente de l'apparition du modal d'authentification...");
     await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
@@ -558,8 +555,10 @@ async function publishOnVinted(adData) {
       throw new Error("Méthode de connexion non supportée : " + credentials.method);
     }
 
-    console.log("Attente de la validation de la connexion...");
-    await page.waitForNavigation();
+    // Pour confirmer la connexion, au lieu d'attendre une navigation complète,
+    // on attend que le bouton "Vends tes articles" devienne visible.
+    console.log("Attente que le bouton 'Vends tes articles' soit visible...");
+    await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { state: 'visible', timeout: 60000 });
     console.log("Connexion effectuée avec succès");
 
     console.log("Clic sur le bouton 'Vends tes articles'...");
