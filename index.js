@@ -11,7 +11,7 @@ app.use(express.json());
 async function handleAppleLogin(page, context, credentials) {
   console.log("Gestion de la connexion via Apple...");
 
-  // Clique sur le bouton "Continuer avec Apple" et attend l'ouverture du nouvel onglet
+  // Clique sur "Continuer avec Apple" et attend l'ouverture d'un nouvel onglet
   const [applePage] = await Promise.all([
     context.waitForEvent('page', { timeout: 60000 }),
     page.waitForSelector('button:has-text("Continuer avec Apple")', { state: 'visible', timeout: 60000 }),
@@ -19,30 +19,30 @@ async function handleAppleLogin(page, context, credentials) {
   ]);
   console.log("Nouvel onglet Apple détecté");
 
-  // Attendre que la page soit chargée
+  // Attendre que la page ait chargé son contenu HTML
   await applePage.waitForLoadState('domcontentloaded');
 
-  // Remplir le champ e-mail
+  // 1) Remplir le champ e-mail
   console.log("Attente du champ e-mail dans l'onglet Apple...");
   await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
   await applePage.fill('#account_name_text_field', credentials.email);
 
-  // Cliquer sur le bouton "Continuer" (via aria-label="Continuer")
-  console.log("Clique sur le bouton 'Continuer' (flèche pour l'e-mail)...");
-  await applePage.waitForSelector('button[aria-label="Continuer"]', { timeout: 60000 });
-  await applePage.click('button[aria-label="Continuer"]');
+  // 2) Cliquer sur le bouton « Continuer » (id="sign-in" + aria-label="Continuer")
+  console.log('Clique sur le bouton [aria-label="Continuer"]...');
+  await applePage.waitForSelector('button#sign-in[aria-label="Continuer"]', { timeout: 60000 });
+  await applePage.click('button#sign-in[aria-label="Continuer"]');
 
-  // Remplir le champ mot de passe
+  // 3) Remplir le champ mot de passe
   console.log("Attente du champ mot de passe...");
   await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
   await applePage.fill('#password_text_field', credentials.password);
 
-  // Cliquer sur le bouton "Se connecter" (via aria-label="Se connecter")
-  console.log("Clique sur le bouton 'Se connecter' (flèche pour le mot de passe)...");
-  await applePage.waitForSelector('button[aria-label="Se connecter"]', { timeout: 60000 });
-  await applePage.click('button[aria-label="Se connecter"]');
+  // 4) Cliquer sur le bouton « Se connecter » (id="sign-in" + aria-label="Se connecter")
+  console.log('Clique sur le bouton [aria-label="Se connecter"]...');
+  await applePage.waitForSelector('button#sign-in[aria-label="Se connecter"]', { timeout: 60000 });
+  await applePage.click('button#sign-in[aria-label="Se connecter"]');
 
-  // Attendre la fin du chargement (réseau inactif) puis fermer l'onglet
+  // Attendre la fin des requêtes réseau avant de fermer l'onglet
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
   await applePage.close();
@@ -51,7 +51,7 @@ async function handleAppleLogin(page, context, credentials) {
 async function publishOnVinted(adData) {
   console.log("Début de publishOnVinted avec les données reçues :", adData);
 
-  // Extraire les données du JSON envoyé
+  // Extraire les données du JSON
   const user = adData.user;
   const listing = adData.listing;
 
@@ -542,31 +542,33 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    // Lance le navigateur
+    // Lance Playwright
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
 
+    // Aller sur Vinted
     console.log("Navigation vers https://www.vinted.fr/ ...");
     await page.goto('https://www.vinted.fr/');
     console.log("Page d'accueil Vinted chargée");
 
+    // Cliquer sur "S'inscrire | Se connecter" via evaluate (pour éviter l'interception du clic)
     console.log("Recherche du bouton 'S'inscrire | Se connecter'...");
     const signInButton = page.locator('[data-testid="header--login-button"]').filter({
       hasText: "S'inscrire | Se connecter"
     });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
     console.log("Bouton détecté, déclenchement du clic via evaluate...");
-
-    // Déclencher le clic via evaluate pour lancer le modal
     await page.evaluate(() => {
       document.querySelector('[data-testid="header--login-button"]').click();
     });
 
+    // Attendre l'apparition du modal
     console.log("Attente de l'apparition du modal d'authentification...");
     await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
     console.log("Modal d'authentification détecté");
 
+    // Gestion de la connexion selon la méthode
     console.log("Méthode de connexion demandée :", credentials.method);
     if (credentials.method === "email") {
       console.log("Sélection de l'option 'e-mail'...");
@@ -580,7 +582,7 @@ async function publishOnVinted(adData) {
       console.log("Envoi du formulaire de connexion...");
       await page.click('button[type="submit"]');
     } else if (credentials.method === "apple") {
-      // Gestion du nouvel onglet Apple
+      // Gestion de l'onglet Apple
       const context = page.context();
       await handleAppleLogin(page, context, credentials);
 
@@ -600,10 +602,12 @@ async function publishOnVinted(adData) {
       throw new Error("Méthode de connexion non supportée : " + credentials.method);
     }
 
+    // Attendre l'affichage du bouton "Vends tes articles" comme preuve de connexion réussie
     console.log("Attente que le bouton 'Vends tes articles' soit visible...");
     await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { state: 'visible', timeout: 60000 });
     console.log("Connexion effectuée avec succès");
 
+    // Lancer la création d'annonce
     console.log("Clic sur le bouton 'Vends tes articles'...");
     await page.click('[data-testid="side-bar-sell-btn"]');
     console.log("Bouton 'Vends tes articles' cliqué");
