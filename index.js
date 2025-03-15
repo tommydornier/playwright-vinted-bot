@@ -515,10 +515,7 @@ async function publishOnVinted(adData) {
     });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
     console.log("Bouton détecté, clic sur 'S'inscrire | Se connecter'...");
-    // Forcer le clic sans noWaitAfter pour permettre au comportement par défaut de se déclencher
-    await signInButton.click({ force: true });
-    // Petite pause pour laisser le temps au modal de s'afficher
-    await page.waitForTimeout(1000);
+    await signInButton.click(); // Clic naturel pour déclencher le modal
 
     console.log("Attente de l'apparition du modal d'authentification...");
     await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
