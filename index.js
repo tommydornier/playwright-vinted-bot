@@ -10,7 +10,6 @@ app.use(express.json());
 async function publishOnVinted(adData) {
   console.log("Début de publishOnVinted avec les données reçues :", adData);
 
-  // Extraire les données du JSON envoyé par Jarvis
   const user = adData.user;
   const listing = adData.listing;
 
@@ -487,11 +486,12 @@ async function publishOnVinted(adData) {
   const price = Number(listing.price);
   const categoryName = listing.category;
   const categoryId = categoryMapping[categoryName];
+
   if (!categoryId) {
     throw new Error("Catégorie inconnue : " + categoryName);
   }
-  const imageUrls = listing.images;
 
+  const imageUrls = listing.images;
   const credentials = {
     method: user.authProvider,
     email: user.email,
@@ -501,7 +501,6 @@ async function publishOnVinted(adData) {
   console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
 
   try {
-    // Option : augmenter le timeout par défaut pour toute la page
     const browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
     page.setDefaultTimeout(60000);
@@ -510,94 +509,83 @@ async function publishOnVinted(adData) {
     await page.goto('https://www.vinted.fr/');
     console.log("Page d'accueil Vinted chargée");
 
-    console.log("Attente du bouton 'S'inscrire | Se connecter'...");
-    await page.waitForSelector('[data-testid="side-bar-signin-btn"]', { timeout: 60000 });
-    console.log("Bouton trouvé, clic sur 'S'inscrire | Se connecter'...");
-    await page.click('[data-testid="side-bar-signin-btn"]');
-    console.log("Bouton 'S'inscrire | Se connecter' cliqué");
+    // ✅ **Détection plus robuste du bouton de connexion**
+    console.log("Recherche du bouton 'S'inscrire | Se connecter'...");
+    const signInButton = await page.waitForSelector('[data-testid="side-bar-signin-btn"], text="Se connecter"', { state: 'visible', timeout: 60000 });
+    console.log("Bouton détecté, clic sur 'Se connecter'...");
+    await signInButton.click();
 
     console.log("Méthode de connexion demandée :", credentials.method);
+
     if (credentials.method === "email") {
       console.log("Sélection de l'option 'e-mail'...");
-      await page.waitForSelector('span:has-text("e-mail")', { timeout: 60000 });
+      await page.waitForSelector('span:has-text("e-mail")', { state: 'visible' });
       await page.click('span:has-text("e-mail")');
-      console.log("Option de connexion par e-mail sélectionnée");
+      console.log("Option e-mail sélectionnée");
 
-      console.log("Remplissage du formulaire de connexion...");
+      console.log("Remplissage des champs email/mot de passe...");
       await page.fill('input[name="email"]', credentials.email);
       await page.fill('input[name="password"]', credentials.password);
-      console.log("Envoi du formulaire de connexion...");
+      console.log("Connexion en cours...");
       await page.click('button[type="submit"]');
+
     } else if (credentials.method === "apple") {
-      console.log("Sélection de l'option 'Continuer avec Apple'...");
+      console.log("Connexion via Apple...");
       await page.click('button:has-text("Continuer avec Apple")');
-      console.log("Option de connexion avec Apple sélectionnée");
       await page.waitForNavigation();
+
     } else if (credentials.method === "google") {
-      console.log("Sélection de l'option 'Continuer avec Google'...");
+      console.log("Connexion via Google...");
       await page.click('a:has-text("Continuer avec Google")');
-      console.log("Option de connexion avec Google sélectionnée");
       await page.waitForNavigation();
+
     } else if (credentials.method === "facebook") {
-      console.log("Sélection de l'option 'Continuer avec Facebook'...");
+      console.log("Connexion via Facebook...");
       await page.click('button:has-text("Continuer avec Facebook")');
-      console.log("Option de connexion avec Facebook sélectionnée");
       await page.waitForNavigation();
+
     } else {
       throw new Error("Méthode de connexion non supportée : " + credentials.method);
     }
 
-    console.log("Attente de la validation de la connexion...");
+    console.log("Vérification de la connexion...");
     await page.waitForNavigation();
-    console.log("Connexion effectuée");
+    console.log("Connexion réussie !");
 
-    console.log("Clic sur le bouton 'Vends tes articles'...");
+    console.log("Clic sur 'Vends tes articles'...");
     await page.click('[data-testid="side-bar-sell-btn"]');
-    console.log("Bouton 'Vends tes articles' cliqué");
+    await page.waitForSelector('input[name="title"]', { state: 'visible' });
 
-    console.log("Attente du chargement de la page de création d'annonce...");
-    await page.waitForSelector('input[name="title"]');
-    console.log("Page de création d'annonce chargée");
-
-    console.log("Remplissage du champ 'Titre'...");
+    console.log("Remplissage des champs...");
     await page.fill('input[name="title"]', title);
-    console.log("Remplissage du champ 'Description'...");
     await page.fill('textarea[name="description"]', description);
-    console.log("Remplissage du champ 'Prix'...");
     await page.fill('input[name="price"]', String(price));
-    console.log("Champs du formulaire remplis");
 
-    console.log(`Sélection de la catégorie avec l'ID #catalog-${categoryId}...`);
+    console.log(`Sélection de la catégorie avec ID #catalog-${categoryId}...`);
     await page.click(`#catalog-${categoryId}`);
-    console.log("Catégorie sélectionnée");
 
-    console.log("Ouverture du file chooser pour uploader les images...");
+    console.log("Ajout des images...");
     const [fileChooser] = await Promise.all([
-      page.waitForFileChooser({ timeout: 60000 }),
+      page.waitForFileChooser(),
       page.click('button:has-text("Ajoute des photos")')
     ]);
-    const localImagePaths = imageUrls.map(url => {
-      const fileName = extractFileName(url);
-      console.log(`Préparation de l'image : ${fileName}`);
-      return `/app/images/${fileName}`;
-    });
-    console.log("Chemins locaux des images :", localImagePaths);
+
+    const localImagePaths = imageUrls.map(url => `/app/images/${extractFileName(url)}`);
     await fileChooser.setFiles(localImagePaths);
     console.log("Images uploadées");
 
-    console.log("Clic sur le bouton de soumission du formulaire...");
+    console.log("Clic sur le bouton de soumission...");
     await page.click('button[type="submit"]');
     console.log("Formulaire soumis");
 
-    console.log("Attente de la confirmation de publication (texte 'Ton article est en ligne !')...");
+    console.log("Attente de la confirmation de publication...");
     await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
-    console.log("Annonce publiée sur Vinted !");
+    console.log("✅ Annonce publiée sur Vinted !");
 
-    console.log("Fermeture du navigateur...");
     await browser.close();
-    console.log("Processus de publication terminé");
+    console.log("🚀 Processus terminé avec succès !");
   } catch (err) {
-    console.error("Erreur dans publishOnVinted :", err);
+    console.error("❌ Erreur dans publishOnVinted :", err);
     throw err;
   }
 }
@@ -609,20 +597,13 @@ function extractFileName(url) {
 }
 
 app.post('/publish-ad', async (req, res) => {
-  // Répondre immédiatement avec un statut 202 Accepted
   res.status(202).json({ message: "Job de publication reçu et en cours de traitement" });
 
-  // Lancer la publication en arrière-plan
   publishOnVinted(req.body)
-    .then(() => {
-      console.log("Publication terminée avec succès");
-    })
-    .catch((error) => {
-      console.error("Erreur lors de la publication en arrière-plan :", error);
-      // Vous pouvez notifier via une autre méthode si besoin
-    });
+    .then(() => console.log("Publication terminée avec succès"))
+    .catch((error) => console.error("Erreur lors de la publication :", error));
 });
 
 app.listen(port, () => {
-  console.log(`Service de publication écoute sur le port ${port}`);
+  console.log(`🚀 Serveur de publication actif sur le port ${port}`);
 });
