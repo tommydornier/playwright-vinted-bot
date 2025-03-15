@@ -23,33 +23,31 @@ async function handleAppleLogin(page, context, credentials) {
   await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
   await applePage.fill('#account_name_text_field', credentials.email);
 
-  // Attendre un court délai pour s'assurer que le bouton est bien affiché
-  await applePage.waitForTimeout(500);
+  // Attendre un délai supplémentaire pour laisser le temps aux animations
+  await applePage.waitForTimeout(1000);
 
-  // Cliquer sur le bouton "Continuer" (basé sur aria-label uniquement)
+  // Cliquer sur le bouton "Continuer" basé sur aria-label
   console.log("Recherche et clic sur le bouton 'Continuer'...");
-  const continueButton = applePage.locator('button[aria-label="Continuer"]');
-  await continueButton.waitFor({ state: 'visible', timeout: 60000 });
-  await continueButton.click();
+  await applePage.waitForSelector('button[aria-label*="Continuer"]', { timeout: 60000 });
+  await applePage.click('button[aria-label*="Continuer"]');
 
   // Attendre un délai pour la transition
-  await applePage.waitForTimeout(500);
+  await applePage.waitForTimeout(1000);
 
   // Remplissage du champ mot de passe
   console.log("Attente du champ mot de passe dans l'onglet Apple...");
   await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
   await applePage.fill('#password_text_field', credentials.password);
 
-  // Attendre un court délai avant de cliquer sur "Se connecter"
-  await applePage.waitForTimeout(500);
+  // Attendre un délai supplémentaire avant de cliquer sur "Se connecter"
+  await applePage.waitForTimeout(1000);
 
-  // Cliquer sur le bouton "Se connecter" (basé sur aria-label uniquement)
+  // Cliquer sur le bouton "Se connecter" basé sur aria-label
   console.log("Recherche et clic sur le bouton 'Se connecter'...");
-  const loginButton = applePage.locator('button[aria-label="Se connecter"]');
-  await loginButton.waitFor({ state: 'visible', timeout: 60000 });
-  await loginButton.click();
+  await applePage.waitForSelector('button[aria-label*="Se connecter"]', { timeout: 60000 });
+  await applePage.click('button[aria-label*="Se connecter"]');
 
-  // Attendre que le nouvel onglet ait terminé ses requêtes réseau
+  // Attendre que le nouvel onglet termine ses requêtes réseau
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
   await applePage.close();
@@ -62,7 +60,7 @@ async function publishOnVinted(adData) {
   const user = adData.user;
   const listing = adData.listing;
 
-// Mapping complet des catégories Vinted
+  // Mapping complet des catégories Vinted
   const categoryMapping = {
     "Femmes": 1904,
     "Femmes > Vêtements": 4,
