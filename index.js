@@ -14,7 +14,7 @@ async function publishOnVinted(adData) {
   const user = adData.user;
   const listing = adData.listing;
 
-  // Mapping complet des catégories Vinted
+  // Mapping complet des catégories Vinted (inchangé)
   const categoryMapping = {
     "Femmes": 1904,
     "Femmes > Vêtements": 4,
@@ -269,7 +269,7 @@ async function publishOnVinted(adData) {
     "Femmes > Accessoires > Bijoux > Ensembles de bijoux": 166,
     "Femmes > Accessoires > Bijoux > Colliers": 164,
     "Femmes > Accessoires > Bijoux > Bagues": 553,
-    "Femmes > Accessoires > Bijoux > Autres bijoux": 162,
+    "Femmes > Accessoires > Bijoux > Autres": 162,
     "Femmes > Accessoires > Portes-clés": 1852,
     "Femmes > Accessoires > Écharpes et châles": 89,
     "Femmes > Accessoires > Lunettes de soleil": 26,
@@ -515,7 +515,7 @@ async function publishOnVinted(adData) {
     });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
     console.log("Bouton détecté, déclenchement du clic via evaluate...");
-    // Utilise evaluate pour déclencher l'événement click directement
+    // Déclenche l'événement click directement via evaluate pour s'assurer de lancer le modal
     await page.evaluate(() => {
       document.querySelector('[data-testid="header--login-button"]').click();
     });
@@ -538,10 +538,26 @@ async function publishOnVinted(adData) {
       await page.click('button[type="submit"]');
     } else if (credentials.method === "apple") {
       console.log("Sélection de l'option 'Continuer avec Apple'...");
-      await page.waitForSelector('button:has-text("Continuer avec Apple")', { state: 'visible', timeout: 60000 });
-      await page.click('button:has-text("Continuer avec Apple")');
-      console.log("Option 'Apple' sélectionnée");
-      await page.waitForNavigation();
+      // Pour Apple, le clic ouvre un nouvel onglet pour l'authentification.
+      const context = page.context();
+      const [applePage] = await Promise.all([
+        context.waitForEvent('page', { timeout: 60000 }),
+        page.waitForSelector('button:has-text("Continuer avec Apple")', { state: 'visible', timeout: 60000 }),
+        page.click('button:has-text("Continuer avec Apple")')
+      ]);
+      console.log("Nouvel onglet Apple détecté");
+      await applePage.waitForLoadState('domcontentloaded');
+      // Ici, adapte les sélecteurs en fonction du formulaire Apple réel :
+      console.log("Remplissage du formulaire de connexion Apple...");
+      await applePage.waitForSelector('input[type="email"]', { timeout: 60000 });
+      await applePage.fill('input[type="email"]', credentials.email);
+      await applePage.click('button:has-text("Continuer")');
+      await applePage.waitForSelector('input[type="password"]', { timeout: 60000 });
+      await applePage.fill('input[type="password"]', credentials.password);
+      await applePage.click('button:has-text("Se connecter")');
+      await applePage.waitForLoadState('networkidle');
+      console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
+      await applePage.close();
     } else if (credentials.method === "google") {
       console.log("Sélection de l'option 'Continuer avec Google'...");
       await page.waitForSelector('a:has-text("Continuer avec Google")', { state: 'visible', timeout: 60000 });
@@ -558,8 +574,9 @@ async function publishOnVinted(adData) {
       throw new Error("Méthode de connexion non supportée : " + credentials.method);
     }
 
-    console.log("Attente de la validation de la connexion...");
-    await page.waitForNavigation();
+    // Au lieu d'attendre une navigation complète, on attend que le bouton "Vends tes articles" soit visible.
+    console.log("Attente que le bouton 'Vends tes articles' soit visible...");
+    await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { state: 'visible', timeout: 60000 });
     console.log("Connexion effectuée avec succès");
 
     console.log("Clic sur le bouton 'Vends tes articles'...");
