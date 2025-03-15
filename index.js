@@ -22,32 +22,27 @@ async function handleAppleLogin(page, context, credentials) {
   console.log("Attente du champ e-mail dans l'onglet Apple...");
   await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
   await applePage.fill('#account_name_text_field', credentials.email);
-  
   // Attendre un délai pour laisser le temps aux animations
   await applePage.waitForTimeout(1000);
 
-  // Puisque les boutons ont le même id ("sign-in"), on récupère la liste et on clique sur le premier (pour l’e-mail)
-  const signInButtons = applePage.locator('button#sign-in');
-  console.log("Clique sur le premier bouton 'sign-in' (Continuer)...");
-  await signInButtons.first().waitFor({ state: 'visible', timeout: 60000 });
-  await signInButtons.first().click({ force: true });
-  
-  // Attendre un délai pour la transition vers le formulaire de mot de passe
+  // Cliquer sur le bouton "Continuer" en se basant sur l'attribut aria-label
+  console.log("Recherche et clic sur le bouton 'Continuer'...");
+  await applePage.waitForSelector('button[aria-label="Continuer"]', { timeout: 60000 });
+  await applePage.click('button[aria-label="Continuer"]', { force: true });
   await applePage.waitForTimeout(1000);
 
   // Remplissage du champ mot de passe
   console.log("Attente du champ mot de passe dans l'onglet Apple...");
   await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
   await applePage.fill('#password_text_field', credentials.password);
-
   await applePage.waitForTimeout(1000);
 
-  // Cliquer sur le deuxième bouton "sign-in" (pour "Se connecter")
-  console.log("Clique sur le deuxième bouton 'sign-in' (Se connecter)...");
-  await signInButtons.nth(1).waitFor({ state: 'visible', timeout: 60000 });
-  await signInButtons.nth(1).click({ force: true });
+  // Cliquer sur le bouton "Se connecter" en se basant sur l'attribut aria-label
+  console.log("Recherche et clic sur le bouton 'Se connecter'...");
+  await applePage.waitForSelector('button[aria-label="Se connecter"]', { timeout: 60000 });
+  await applePage.click('button[aria-label="Se connecter"]', { force: true });
 
-  // Attendre la fin du chargement des requêtes réseau
+  // Attendre que toutes les requêtes soient terminées avant de fermer l'onglet
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
   await applePage.close();
