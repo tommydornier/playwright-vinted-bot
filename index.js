@@ -510,16 +510,16 @@ async function publishOnVinted(adData) {
     console.log("Page d'accueil Vinted chargée");
 
     console.log("Recherche du bouton 'S'inscrire | Se connecter'...");
-    // Utilisation du sélecteur mis à jour
     const signInButton = page.locator('[data-testid="header--login-button"]').filter({
       hasText: "S'inscrire | Se connecter"
     });
     await signInButton.waitFor({ state: 'visible', timeout: 60000 });
     console.log("Bouton détecté, clic sur 'S'inscrire | Se connecter'...");
-    // Force le clic pour ne pas réessayer si l'overlay apparaît
-    await signInButton.click({ force: true, noWaitAfter: true });
+    // Forcer le clic sans noWaitAfter pour permettre au comportement par défaut de se déclencher
+    await signInButton.click({ force: true });
+    // Petite pause pour laisser le temps au modal de s'afficher
+    await page.waitForTimeout(1000);
 
-    // Attendre que le modal d'authentification apparaisse
     console.log("Attente de l'apparition du modal d'authentification...");
     await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
     console.log("Modal d'authentification détecté");
