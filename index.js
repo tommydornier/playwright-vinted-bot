@@ -46,14 +46,18 @@ async function handleAppleLogin(page, context, credentials) {
   console.log("Clique sur le bouton 'sign-in' (Se connecter)...");
   await signInButtons.first().click({ force: true });
 
-  // Nouvelle étape : attendre et cliquer sur le bouton "Continuer" pour confirmer l'utilisation du compte Apple
+  // Nouvelle étape : attendre et cliquer sur le bouton "Continuer" (celui qui confirme l'utilisation de votre compte Apple)
   console.log("Attente du bouton 'Continuer' dans l'onglet Apple...");
-  // Ici, nous utilisons le sélecteur 'button.nav-action' et filtrons par texte
-  const continuerButton = applePage.locator('button.nav-action').filter({ hasText: "Continuer" });
-  await continuerButton.waitFor({ state: 'visible', timeout: 60000 });
-  console.log("Bouton 'Continuer' détecté, clic sur 'Continuer'...");
-  await continuerButton.click({ force: true });
-
+  try {
+    // Ici, nous utilisons le sélecteur qui cible un bouton avec la classe "nav-action" et le texte "Continuer"
+    const continuerButton = applePage.locator('button.nav-action').filter({ hasText: "Continuer" });
+    await continuerButton.waitFor({ state: 'visible', timeout: 30000 });
+    console.log("Bouton 'Continuer' détecté, clic sur 'Continuer'...");
+    await continuerButton.click({ force: true });
+  } catch (e) {
+    console.warn("Bouton 'Continuer' introuvable après 30s, passage à l'étape suivante...");
+  }
+  
   // Attendre la fin du chargement (network idle) avant de fermer l'onglet
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
@@ -607,6 +611,7 @@ async function publishOnVinted(adData) {
       throw new Error("Méthode de connexion non supportée : " + credentials.method);
     }
 
+    // Délai supplémentaire pour que l'interface se stabilise après la connexion
     console.log("Attente supplémentaire pour la stabilisation de l'interface...");
     await page.waitForTimeout(3000);
 
