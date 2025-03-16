@@ -46,6 +46,13 @@ async function handleAppleLogin(page, context, credentials) {
   console.log("Clique sur le bouton 'sign-in' (Se connecter)...");
   await signInButtons.first().click({ force: true });
 
+  // Nouvelle étape : attendre et cliquer sur le bouton "Continuer"
+  console.log("Attente du bouton 'Continuer' dans l'onglet Apple...");
+  await applePage.waitForSelector('button:has-text("Continuer")', { state: 'visible', timeout: 60000 });
+  console.log("Bouton 'Continuer' détecté, clic sur 'Continuer'...");
+  await applePage.click('button:has-text("Continuer")', { force: true });
+
+  // Attendre que toutes les requêtes se terminent
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
   await applePage.close();
@@ -598,9 +605,13 @@ async function publishOnVinted(adData) {
       throw new Error("Méthode de connexion non supportée : " + credentials.method);
     }
 
+    // Délai supplémentaire pour que l'interface se stabilise après la connexion
+    console.log("Attente supplémentaire pour la stabilisation de l'interface...");
+    await page.waitForTimeout(3000);
+
     console.log("Attente que le bouton 'Vends tes articles' soit visible...");
     await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { state: 'visible', timeout: 60000 });
-    console.log("Connexion effectuée avec succès");
+    console.log("Bouton 'Vends tes articles' détecté");
 
     console.log("Clic sur le bouton 'Vends tes articles'...");
     await page.click('[data-testid="side-bar-sell-btn"]');
