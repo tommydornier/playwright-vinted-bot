@@ -22,32 +22,30 @@ async function handleAppleLogin(page, context, credentials) {
   console.log("Attente du champ e-mail dans l'onglet Apple...");
   await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
   await applePage.fill('#account_name_text_field', credentials.email);
-  
-  // Attendre un délai pour laisser le temps aux animations
   await applePage.waitForTimeout(1000);
 
-  // Puisque les boutons ont le même id ("sign-in"), on récupère la liste et on clique sur le premier (pour l’e-mail)
-  const signInButtons = applePage.locator('button#sign-in');
+  // Clique sur le premier bouton "sign-in" pour valider l’e-mail
+  let signInButtons = applePage.locator('button#sign-in');
   console.log("Clique sur le premier bouton 'sign-in' (Continuer)...");
   await signInButtons.first().waitFor({ state: 'visible', timeout: 60000 });
   await signInButtons.first().click({ force: true });
   
-  // Attendre un délai pour la transition vers le formulaire de mot de passe
+  // Attendre la transition vers le formulaire de mot de passe
   await applePage.waitForTimeout(1000);
 
   // Remplissage du champ mot de passe
   console.log("Attente du champ mot de passe dans l'onglet Apple...");
   await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
   await applePage.fill('#password_text_field', credentials.password);
-
   await applePage.waitForTimeout(1000);
 
-  // Cliquer sur le deuxième bouton "sign-in" (pour "Se connecter")
-  console.log("Clique sur le deuxième bouton 'sign-in' (Se connecter)...");
-  await signInButtons.nth(1).waitFor({ state: 'visible', timeout: 60000 });
-  await signInButtons.nth(1).click({ force: true });
+  // Recréer le locator pour récupérer le bouton de confirmation mis à jour
+  signInButtons = applePage.locator('button#sign-in');
+  console.log("Recherche du bouton 'sign-in' pour se connecter...");
+  await signInButtons.first().waitFor({ state: 'visible', timeout: 60000 });
+  console.log("Clique sur le bouton 'sign-in' (Se connecter)...");
+  await signInButtons.first().click({ force: true });
 
-  // Attendre la fin du chargement des requêtes réseau
   await applePage.waitForLoadState('networkidle');
   console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
   await applePage.close();
