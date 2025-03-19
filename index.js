@@ -1,8 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
 const { chromium } = require('playwright');
-const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
@@ -479,7 +477,7 @@ app.use(express.json());
     "Hommes > Soins > Accessoires > Autres cosmétiques": 968
   };
 
-// ✅ Fonction pour récupérer la session Vinted depuis Supabase
+// ✅ Fonction pour récupérer la session depuis Supabase
 async function getSessionFromSupabase(userId, supabaseUrl, supabaseKey) {
     console.log(`📡 Connexion à Supabase pour récupérer la session de ${userId}...`);
     const supabase = createClient(supabaseUrl, supabaseKey);
