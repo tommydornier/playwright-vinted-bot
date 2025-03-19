@@ -1,77 +1,20 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
 const { chromium } = require('playwright');
+const path = require('path');
+
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 
-async function handleAppleLogin(page, context, credentials) {
-  console.log("Gestion de la connexion via Apple...");
-  // Clique sur "Continuer avec Apple" et attend l'ouverture d'un nouvel onglet
-  const [applePage] = await Promise.all([
-    context.waitForEvent('page', { timeout: 60000 }),
-    page.waitForSelector('button:has-text("Continuer avec Apple")', { state: 'visible', timeout: 60000 }),
-    page.click('button:has-text("Continuer avec Apple")')
-  ]);
-  console.log("Nouvel onglet Apple détecté");
-  await applePage.waitForLoadState('domcontentloaded');
+// 📂 Dossier pour stocker les sessions utilisateur
+const SESSIONS_DIR = path.join(__dirname, 'sessions');
+if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR);
 
-  // Remplissage du champ e-mail
-  console.log("Attente du champ e-mail dans l'onglet Apple...");
-  await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
-  await applePage.fill('#account_name_text_field', credentials.email);
-  await applePage.waitForTimeout(1000);
-
-  // Clique sur le premier bouton "sign-in" pour valider l’e-mail
-  let signInButtons = applePage.locator('button#sign-in');
-  console.log("Clique sur le premier bouton 'sign-in' (Continuer)...");
-  await signInButtons.first().waitFor({ state: 'visible', timeout: 60000 });
-  await signInButtons.first().click({ force: true });
-  
-  // Attendre la transition vers le formulaire de mot de passe
-  await applePage.waitForTimeout(1000);
-
-  // Remplissage du champ mot de passe
-  console.log("Attente du champ mot de passe dans l'onglet Apple...");
-  await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
-  await applePage.fill('#password_text_field', credentials.password);
-  await applePage.waitForTimeout(1000);
-
-  // Recréer le locator pour récupérer le bouton de confirmation mis à jour
-  signInButtons = applePage.locator('button#sign-in');
-  console.log("Recherche du bouton 'sign-in' pour se connecter...");
-  await signInButtons.first().waitFor({ state: 'visible', timeout: 60000 });
-  console.log("Clique sur le bouton 'sign-in' (Se connecter)...");
-  await signInButtons.first().click({ force: true });
-
-  // Nouvelle étape : attendre et cliquer sur le bouton "Continuer" (celui qui confirme l'utilisation de votre compte Apple)
-  console.log("Attente du bouton 'Continuer' dans l'onglet Apple...");
-  try {
-    // Ici, nous utilisons le sélecteur qui cible un bouton avec la classe "nav-action" et le texte "Continuer"
-    const continuerButton = applePage.locator('button.nav-action').filter({ hasText: "Continuer" });
-    await continuerButton.waitFor({ state: 'visible', timeout: 30000 });
-    console.log("Bouton 'Continuer' détecté, clic sur 'Continuer'...");
-    await continuerButton.click({ force: true });
-  } catch (e) {
-    console.warn("Bouton 'Continuer' introuvable après 30s, passage à l'étape suivante...");
-  }
-  
-  // Attendre la fin du chargement (network idle) avant de fermer l'onglet
-  await applePage.waitForLoadState('networkidle');
-  console.log("Connexion via Apple effectuée, fermeture du nouvel onglet...");
-  await applePage.close();
-}
-
-async function publishOnVinted(adData) {
-  console.log("Début de publishOnVinted avec les données reçues :", adData);
-
-  // Extraire les données du JSON envoyé par Jarvis
-  const user = adData.user;
-  const listing = adData.listing;
-
-  // Mapping complet des catégories Vinted
+// Mapping complet des catégories Vinted
   const categoryMapping = {
     "Femmes": 1904,
     "Femmes > Vêtements": 4,
@@ -539,150 +482,148 @@ async function publishOnVinted(adData) {
     "Hommes > Soins > Accessoires > Autres cosmétiques": 968
   };
 
-  const title = listing.title;
-  const description = listing.generatedDescription;
-  const price = Number(listing.price);
-  const categoryName = listing.category;
-  const categoryId = categoryMapping[categoryName];
-  if (!categoryId) {
-    throw new Error("Catégorie inconnue : " + categoryName);
-  }
-  const imageUrls = listing.images;
+// ✅ Fonction pour sauvegarder une session utilisateur
+async function saveSession(userId, page) {
+    console.log(`🔒 Sauvegarde de la session pour ${userId}...`);
 
-  const credentials = {
-    method: user.authProvider,  // "email", "apple", "google", "facebook"
-    email: user.email,
-    password: user.password
-  };
+    const cookies = await page.context().cookies();
+    fs.writeFileSync(`${SESSIONS_DIR}/${userId}_cookies.json`, JSON.stringify(cookies, null, 2));
 
-  console.log("Données transformées pour la publication :", { title, description, price, categoryId, imageUrls, credentials });
+    const localStorageData = await page.evaluate(() => 
+        Object.entries(localStorage).map(([key, value]) => ({ key, value }))
+    );
+    fs.writeFileSync(`${SESSIONS_DIR}/${userId}_localStorage.json`, JSON.stringify(localStorageData, null, 2));
 
-  try {
-    const browser = await chromium.launch({ headless: true });
+    console.log(`✅ Session de ${userId} sauvegardée.`);
+}
+
+// ✅ Fonction pour charger une session utilisateur
+async function loadSession(userId, page) {
+    console.log(`🔄 Chargement de la session pour ${userId}...`);
+    
+    const cookiesPath = `${SESSIONS_DIR}/${userId}_cookies.json`;
+    const localStoragePath = `${SESSIONS_DIR}/${userId}_localStorage.json`;
+
+    if (fs.existsSync(cookiesPath) && fs.existsSync(localStoragePath)) {
+        const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf8'));
+        await page.context().addCookies(cookies);
+
+        const localStorageData = JSON.parse(fs.readFileSync(localStoragePath, 'utf8'));
+        await page.evaluate(localStorageData => {
+            localStorageData.forEach(({ key, value }) => localStorage.setItem(key, value));
+        }, localStorageData);
+
+        console.log(`✅ Session chargée pour ${userId}.`);
+        return true;
+    } else {
+        console.warn(`⚠️ Aucune session enregistrée pour ${userId}. Connexion requise.`);
+        return false;
+    }
+}
+
+// ✅ Fonction pour gérer la connexion de l’utilisateur
+async function loginToVinted(userId, credentials) {
+    const browser = await chromium.launch({ headless: false });
     const page = await browser.newPage();
-    page.setDefaultTimeout(60000);
 
-    console.log("Navigation vers https://www.vinted.fr/ ...");
+    console.log(`🔑 Connexion de ${userId} à Vinted...`);
     await page.goto('https://www.vinted.fr/');
-    console.log("Page d'accueil Vinted chargée");
 
     console.log("Recherche du bouton 'S'inscrire | Se connecter'...");
-    const signInButton = page.locator('[data-testid="header--login-button"]').filter({
-      hasText: "S'inscrire | Se connecter"
-    });
-    await signInButton.waitFor({ state: 'visible', timeout: 60000 });
-    console.log("Bouton détecté, déclenchement du clic via evaluate...");
-    await page.evaluate(() => {
-      document.querySelector('[data-testid="header--login-button"]').click();
-    });
+    await page.waitForSelector('[data-testid="header--login-button"]', { timeout: 60000 });
+    await page.click('[data-testid="header--login-button"]');
 
-    console.log("Attente de l'apparition du modal d'authentification...");
-    await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
-    console.log("Modal d'authentification détecté");
+    console.log("Connexion via email...");
+    await page.waitForSelector('[data-testid="auth-select-type--login-email"]', { timeout: 60000 });
+    await page.click('[data-testid="auth-select-type--login-email"]');
+    await page.fill('input[name="email"]', credentials.email);
+    await page.fill('input[name="password"]', credentials.password);
+    await page.click('button[type="submit"]');
 
-    console.log("Méthode de connexion demandée :", credentials.method);
-    if (credentials.method === "email") {
-      console.log("Sélection de l'option 'e-mail'...");
-      await page.waitForSelector('[data-testid="auth-select-type--login-email"]', { state: 'visible', timeout: 60000 });
-      await page.click('[data-testid="auth-select-type--login-email"]');
-      console.log("Option 'e-mail' sélectionnée");
-
-      console.log("Remplissage du formulaire e-mail / mot de passe...");
-      await page.fill('input[name="email"]', credentials.email);
-      await page.fill('input[name="password"]', credentials.password);
-      console.log("Envoi du formulaire de connexion...");
-      await page.click('button[type="submit"]');
-    } else if (credentials.method === "apple") {
-      const context = page.context();
-      await handleAppleLogin(page, context, credentials);
-    } else if (credentials.method === "google") {
-      console.log("Sélection de l'option 'Continuer avec Google'...");
-      await page.waitForSelector('a:has-text("Continuer avec Google")', { state: 'visible', timeout: 60000 });
-      await page.click('a:has-text("Continuer avec Google")');
-      console.log("Option 'Google' sélectionnée");
-      await page.waitForNavigation();
-    } else if (credentials.method === "facebook") {
-      console.log("Sélection de l'option 'Continuer avec Facebook'...");
-      await page.waitForSelector('button:has-text("Continuer avec Facebook")', { state: 'visible', timeout: 60000 });
-      await page.click('button:has-text("Continuer avec Facebook")');
-      console.log("Option 'Facebook' sélectionnée");
-      await page.waitForNavigation();
-    } else {
-      throw new Error("Méthode de connexion non supportée : " + credentials.method);
+    try {
+        await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { timeout: 10000 });
+        console.log("✅ Connexion réussie !");
+    } catch (error) {
+        console.error("❌ Échec de connexion.");
+        await browser.close();
+        return false;
     }
 
-    // Délai supplémentaire pour que l'interface se stabilise après la connexion
-    console.log("Attente supplémentaire pour la stabilisation de l'interface...");
-    await page.waitForTimeout(3000);
-
-    console.log("Attente que le bouton 'Vends tes articles' soit visible...");
-    await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { state: 'visible', timeout: 60000 });
-    console.log("Bouton 'Vends tes articles' détecté");
-
-    console.log("Clic sur le bouton 'Vends tes articles'...");
-    await page.click('[data-testid="side-bar-sell-btn"]');
-    console.log("Bouton 'Vends tes articles' cliqué");
-
-    console.log("Attente du chargement de la page de création d'annonce...");
-    await page.waitForSelector('input[name="title"]');
-    console.log("Page de création d'annonce chargée");
-
-    console.log("Remplissage du champ 'Titre'...");
-    await page.fill('input[name="title"]', title);
-    console.log("Remplissage du champ 'Description'...");
-    await page.fill('textarea[name="description"]', description);
-    console.log("Remplissage du champ 'Prix'...");
-    await page.fill('input[name="price"]', String(price));
-    console.log("Champs du formulaire remplis");
-
-    console.log(`Sélection de la catégorie avec l'ID #catalog-${categoryId}...`);
-    await page.click(`#catalog-${categoryId}`);
-    console.log("Catégorie sélectionnée");
-
-    console.log("Ouverture du file chooser pour uploader les images...");
-    const [fileChooser] = await Promise.all([
-      page.waitForFileChooser({ timeout: 60000 }),
-      page.click('button:has-text("Ajoute des photos")')
-    ]);
-    const localImagePaths = imageUrls.map(url => {
-      const fileName = url.split('/').pop().split('?')[0];
-      console.log(`Préparation de l'image : ${fileName}`);
-      return `/app/images/${fileName}`;
-    });
-    console.log("Chemins locaux des images :", localImagePaths);
-    await fileChooser.setFiles(localImagePaths);
-    console.log("Images uploadées");
-
-    console.log("Clic sur le bouton de soumission du formulaire...");
-    await page.click('button[type="submit"]');
-    console.log("Formulaire soumis");
-
-    console.log("Attente de la confirmation de publication (texte 'Ton article est en ligne !')...");
-    await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
-    console.log("Annonce publiée sur Vinted !");
-
-    console.log("Fermeture du navigateur...");
+    await saveSession(userId, page);
     await browser.close();
-    console.log("Processus de publication terminé avec succès");
-  } catch (err) {
-    console.error("Erreur dans publishOnVinted :", err);
-    throw err;
-  }
+    return true;
 }
 
-function extractFileName(url) {
-  const fileName = url.split('/').pop().split('?')[0];
-  console.log(`Nom de fichier extrait : ${fileName}`);
-  return fileName;
+// ✅ Fonction pour publier une annonce
+async function publishOnVinted(userId, listingData) {
+    console.log(`📢 Publication pour ${userId}...`);
+    
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+
+    const sessionLoaded = await loadSession(userId, page);
+    if (!sessionLoaded) {
+        console.error("⚠️ Impossible de publier, l'utilisateur doit se reconnecter.");
+        await browser.close();
+        return { success: false, message: "Veuillez vous reconnecter." };
+    }
+
+    console.log("Navigation vers Vinted...");
+    await page.goto('https://www.vinted.fr/');
+
+    try {
+        await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { timeout: 10000 });
+        console.log("Utilisateur connecté, prêt à publier.");
+    } catch (error) {
+        console.error("⚠️ Session expirée.");
+        await browser.close();
+        return { success: false, message: "Session expirée, reconnectez-vous." };
+    }
+
+    console.log("Clic sur 'Vends tes articles'...");
+    await page.click('[data-testid="side-bar-sell-btn"]');
+    await page.waitForSelector('input[name="title"]', { timeout: 60000 });
+
+    console.log("Remplissage du formulaire...");
+    await page.fill('input[name="title"]', listingData.title);
+    await page.fill('textarea[name="description"]', listingData.description);
+    await page.fill('input[name="price"]', String(listingData.price));
+
+    // 🔥 Ajout de la gestion de catégorie
+    const categoryName = listingData.category;
+    const categoryId = categoryMapping[categoryName];
+    if (!categoryId) {
+        console.error(`❌ Catégorie inconnue : ${categoryName}`);
+        await browser.close();
+        return { success: false, message: "Catégorie non reconnue." };
+    }
+    console.log(`📌 Sélection de la catégorie : ${categoryName} (ID: ${categoryId})`);
+    await page.click(`#catalog-${categoryId}`);
+
+    console.log("Publication...");
+    await page.click('button[type="submit"]');
+    await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
+
+    console.log("✅ Annonce publiée !");
+    await browser.close();
+    return { success: true, message: "Annonce publiée !" };
 }
 
-app.post('/publish-ad', async (req, res) => {
-  res.status(202).json({ message: "Job de publication reçu et en cours de traitement" });
-  publishOnVinted(req.body)
-    .then(() => console.log("Publication terminée avec succès"))
-    .catch((error) => console.error("Erreur lors de la publication :", error));
+// ✅ API REST : Connexion utilisateur
+app.post('/login', async (req, res) => {
+    const { userId, email, password } = req.body;
+    const success = await loginToVinted(userId, { email, password });
+    res.json({ success, message: success ? "Connexion réussie et session enregistrée." : "Échec de connexion." });
 });
 
+// ✅ API REST : Publication automatique d'une annonce
+app.post('/publish-ad', async (req, res) => {
+    const { userId, listing } = req.body;
+    const result = await publishOnVinted(userId, listing);
+    res.json(result);
+});
+
+// ✅ Lancement du serveur
 app.listen(port, () => {
-  console.log(`Service de publication écoute sur le port ${port}`);
+    console.log(`🚀 Service Vinted opérationnel sur le port ${port}`);
 });
