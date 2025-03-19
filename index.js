@@ -3,16 +3,13 @@ const cors = require('cors');
 const fs = require('fs');
 const { chromium } = require('playwright');
 const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
-
-// 📂 Dossier pour stocker les sessions utilisateur
-const SESSIONS_DIR = path.join(__dirname, 'sessions');
-if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR);
 
 // Mapping complet des catégories Vinted
   const categoryMapping = {
@@ -482,118 +479,131 @@ if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR);
     "Hommes > Soins > Accessoires > Autres cosmétiques": 968
   };
 
-// ✅ Fonction pour sauvegarder une session utilisateur
-async function saveSession(userId, page) {
-    console.log(`🔒 Sauvegarde de la session pour ${userId}...`);
+// ✅ Fonction pour récupérer la session Vinted depuis Supabase
+async function getSessionFromSupabase(userId, supabaseUrl, supabaseKey) {
+    console.log(`📡 Connexion à Supabase pour récupérer la session de ${userId}...`);
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const cookies = await page.context().cookies();
-    fs.writeFileSync(`${SESSIONS_DIR}/${userId}_cookies.json`, JSON.stringify(cookies, null, 2));
+    const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .eq('userId', userId)
+        .single();
 
-    const localStorageData = await page.evaluate(() => 
-        Object.entries(localStorage).map(([key, value]) => ({ key, value }))
-    );
-    fs.writeFileSync(`${SESSIONS_DIR}/${userId}_localStorage.json`, JSON.stringify(localStorageData, null, 2));
+    if (error || !data) {
+        console.error(`❌ Impossible de récupérer la session pour ${userId}. Erreur:`, error);
+        return null;
+    }
 
-    console.log(`✅ Session de ${userId} sauvegardée.`);
+    console.log(`✅ Session récupérée pour ${userId}.`);
+    return data;
 }
 
-// ✅ Fonction pour charger une session utilisateur
-async function loadSession(userId, page) {
+// ✅ Fonction pour charger la session utilisateur dans Playwright
+async function loadSession(userId, page, supabaseUrl, supabaseKey) {
     console.log(`🔄 Chargement de la session pour ${userId}...`);
-    
-    const cookiesPath = `${SESSIONS_DIR}/${userId}_cookies.json`;
-    const localStoragePath = `${SESSIONS_DIR}/${userId}_localStorage.json`;
 
-    if (fs.existsSync(cookiesPath) && fs.existsSync(localStoragePath)) {
-        const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf8'));
-        await page.context().addCookies(cookies);
-
-        const localStorageData = JSON.parse(fs.readFileSync(localStoragePath, 'utf8'));
-        await page.evaluate(localStorageData => {
-            localStorageData.forEach(({ key, value }) => localStorage.setItem(key, value));
-        }, localStorageData);
-
-        console.log(`✅ Session chargée pour ${userId}.`);
-        return true;
-    } else {
+    const sessionData = await getSessionFromSupabase(userId, supabaseUrl, supabaseKey);
+    if (!sessionData) {
         console.warn(`⚠️ Aucune session enregistrée pour ${userId}. Connexion requise.`);
         return false;
     }
+
+    // Charger les cookies
+    const cookies = JSON.parse(sessionData.cookies);
+    await page.context().addCookies(cookies);
+
+    // Aller sur Vinted
+    await page.goto('https://www.vinted.fr/', { waitUntil: 'load' });
+
+    // Charger le localStorage
+    const localStorageData = JSON.parse(sessionData.localStorage);
+    await page.evaluate(localStorageData => {
+        localStorageData.forEach(({ key, value }) => localStorage.setItem(key, value));
+    }, localStorageData);
+
+    console.log(`✅ Session chargée avec succès pour ${userId}.`);
+    return true;
 }
 
 // ✅ Fonction pour publier une annonce sur Vinted
-async function publishOnVinted(userId, listingData) {
-    console.log(`📢 Publication pour ${userId}...`);
-    
-    const browser = await chromium.launch({ headless: false }); // Met headless: true si tu veux en arrière-plan
+async function publishOnVinted(userId, listingData, supabaseUrl, supabaseKey) {
+    console.log(`📢 Début de la publication pour ${userId}...`);
+
+    const browser = await chromium.launch({ headless: false }); // Mettre headless: true en production
     const page = await browser.newPage();
 
-    const sessionLoaded = await loadSession(userId, page);
+    // Charger la session depuis Supabase
+    const sessionLoaded = await loadSession(userId, page, supabaseUrl, supabaseKey);
     if (!sessionLoaded) {
         console.error("⚠️ Impossible de publier, l'utilisateur doit se reconnecter.");
         await browser.close();
         return { success: false, message: "Veuillez vous reconnecter." };
     }
 
-    console.log("Navigation vers Vinted...");
-    await page.goto('https://www.vinted.fr/');
+    console.log("📌 Vérification de la connexion à Vinted...");
+    await page.goto('https://www.vinted.fr/', { waitUntil: 'load' });
 
     try {
         await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { timeout: 10000 });
-        console.log("Utilisateur connecté, prêt à publier.");
+        console.log("✅ L'utilisateur est bien connecté !");
     } catch (error) {
-        console.error("⚠️ Session expirée.");
+        console.error("⚠️ Session expirée, l'utilisateur doit se reconnecter.");
         await browser.close();
         return { success: false, message: "Session expirée, reconnectez-vous." };
     }
 
-    console.log("Clic sur 'Vends tes articles'...");
+    // Aller sur la page de mise en vente
+    console.log("🛒 Accès à la page de mise en vente...");
     await page.click('[data-testid="side-bar-sell-btn"]');
     await page.waitForSelector('input[name="title"]', { timeout: 60000 });
 
-    console.log("Remplissage du formulaire...");
+    // Remplir le formulaire d'annonce
+    console.log("📝 Remplissage du formulaire...");
     await page.fill('input[name="title"]', listingData.title);
     await page.fill('textarea[name="description"]', listingData.description);
     await page.fill('input[name="price"]', String(listingData.price));
 
-    // 📌 Gestion de la catégorie
-    const categoryName = listingData.category;
-    const categoryId = categoryMapping[categoryName];
-
+    // Gestion de la catégorie
+    console.log("📌 Sélection de la catégorie...");
+    const categoryId = categoryMapping[listingData.category];
     if (!categoryId) {
-        console.error(`❌ Catégorie inconnue : ${categoryName}`);
+        console.error(`❌ Catégorie inconnue : ${listingData.category}`);
         await browser.close();
         return { success: false, message: "Catégorie non reconnue." };
     }
+    await page.click(`#catalog-${categoryId}`);
 
-    console.log(`📌 Sélection de la catégorie : ${categoryName} (ID: ${categoryId})`);
-    await page.click(`[data-testid="catalog-${categoryId}"]`).catch(() => {
-        console.error(`⚠️ Impossible de sélectionner la catégorie ${categoryName}`);
-    });
-
-    console.log("Publication...");
-    await page.click('button[type="submit"]');
-
-    try {
-        await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
-        console.log("✅ Annonce publiée !");
-        await browser.close();
-        return { success: true, message: "Annonce publiée !" };
-    } catch (error) {
-        console.error("❌ Erreur lors de la publication.");
-        await browser.close();
-        return { success: false, message: "Erreur lors de la publication." };
+    // Ajout des images si fournies
+    if (listingData.images && listingData.images.length > 0) {
+        console.log("📸 Ajout des images...");
+        const inputUpload = await page.waitForSelector('input[type="file"]');
+        await inputUpload.setInputFiles(listingData.images);
     }
+
+    // Publication de l'annonce
+    console.log("📢 Publication...");
+    await page.click('button[type="submit"]');
+    await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
+
+    console.log("✅ Annonce publiée avec succès !");
+    await browser.close();
+    return { success: true, message: "Annonce publiée !" };
 }
 
-// ✅ API REST : Publication automatique d'une annonce
+// ✅ API REST pour publier une annonce (avec identifiants Supabase dans la requête)
 app.post('/publish-ad', async (req, res) => {
-    const { userId, listing } = req.body;
-    const result = await publishOnVinted(userId, listing);
+    const { userId, listing, supabaseUrl, supabaseKey } = req.body;
+
+    if (!supabaseUrl || !supabaseKey) {
+        return res.status(400).json({ success: false, message: "Identifiants Supabase manquants." });
+    }
+
+    const result = await publishOnVinted(userId, listing, supabaseUrl, supabaseKey);
     res.json(result);
 });
 
 // ✅ Lancement du serveur
 app.listen(port, () => {
-    console.log(`🚀 Service Vinted opérationnel sur le port ${port}`);
+    console.log(`🚀 Serveur Playwright opérationnel sur le port ${port}`);
 });
