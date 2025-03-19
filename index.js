@@ -521,44 +521,11 @@ async function loadSession(userId, page) {
     }
 }
 
-// ✅ Fonction pour gérer la connexion de l’utilisateur
-async function loginToVinted(userId, credentials) {
-    const browser = await chromium.launch({ headless: false });
-    const page = await browser.newPage();
-
-    console.log(`🔑 Connexion de ${userId} à Vinted...`);
-    await page.goto('https://www.vinted.fr/');
-
-    console.log("Recherche du bouton 'S'inscrire | Se connecter'...");
-    await page.waitForSelector('[data-testid="header--login-button"]', { timeout: 60000 });
-    await page.click('[data-testid="header--login-button"]');
-
-    console.log("Connexion via email...");
-    await page.waitForSelector('[data-testid="auth-select-type--login-email"]', { timeout: 60000 });
-    await page.click('[data-testid="auth-select-type--login-email"]');
-    await page.fill('input[name="email"]', credentials.email);
-    await page.fill('input[name="password"]', credentials.password);
-    await page.click('button[type="submit"]');
-
-    try {
-        await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { timeout: 10000 });
-        console.log("✅ Connexion réussie !");
-    } catch (error) {
-        console.error("❌ Échec de connexion.");
-        await browser.close();
-        return false;
-    }
-
-    await saveSession(userId, page);
-    await browser.close();
-    return true;
-}
-
-// ✅ Fonction pour publier une annonce
+// ✅ Fonction pour publier une annonce sur Vinted
 async function publishOnVinted(userId, listingData) {
     console.log(`📢 Publication pour ${userId}...`);
     
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({ headless: false }); // Met headless: true si tu veux en arrière-plan
     const page = await browser.newPage();
 
     const sessionLoaded = await loadSession(userId, page);
@@ -589,32 +556,35 @@ async function publishOnVinted(userId, listingData) {
     await page.fill('textarea[name="description"]', listingData.description);
     await page.fill('input[name="price"]', String(listingData.price));
 
-    // 🔥 Ajout de la gestion de catégorie
+    // 📌 Gestion de la catégorie
     const categoryName = listingData.category;
     const categoryId = categoryMapping[categoryName];
+
     if (!categoryId) {
         console.error(`❌ Catégorie inconnue : ${categoryName}`);
         await browser.close();
         return { success: false, message: "Catégorie non reconnue." };
     }
+
     console.log(`📌 Sélection de la catégorie : ${categoryName} (ID: ${categoryId})`);
-    await page.click(`#catalog-${categoryId}`);
+    await page.click(`[data-testid="catalog-${categoryId}"]`).catch(() => {
+        console.error(`⚠️ Impossible de sélectionner la catégorie ${categoryName}`);
+    });
 
     console.log("Publication...");
     await page.click('button[type="submit"]');
-    await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
 
-    console.log("✅ Annonce publiée !");
-    await browser.close();
-    return { success: true, message: "Annonce publiée !" };
+    try {
+        await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
+        console.log("✅ Annonce publiée !");
+        await browser.close();
+        return { success: true, message: "Annonce publiée !" };
+    } catch (error) {
+        console.error("❌ Erreur lors de la publication.");
+        await browser.close();
+        return { success: false, message: "Erreur lors de la publication." };
+    }
 }
-
-// ✅ API REST : Connexion utilisateur
-app.post('/login', async (req, res) => {
-    const { userId, email, password } = req.body;
-    const success = await loginToVinted(userId, { email, password });
-    res.json({ success, message: success ? "Connexion réussie et session enregistrée." : "Échec de connexion." });
-});
 
 // ✅ API REST : Publication automatique d'une annonce
 app.post('/publish-ad', async (req, res) => {
