@@ -10,7 +10,6 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Fonctions de gestion de session
 function getSessionPath(email) {
   return path.join(__dirname, 'sessions', `${Buffer.from(email).toString('base64')}.json`);
 }
@@ -32,10 +31,33 @@ function getSessionStorageStatePath(email) {
   return fs.existsSync(path) ? path : null;
 }
 
+// Endpoint pour première connexion manuelle
+app.get('/login-manual', async (req, res) => {
+  const email = req.query.email;
+  if (!email) return res.status(400).send('Email requis');
+
+  const browser = await chromium.launch({ headless: false });
+  const context = await browser.newContext();
+  const page = await context.newPage();
+
+  await page.goto('https://www.vinted.fr/');
+  console.log("Veuillez vous connecter manuellement à Vinted...");
+  
+  try {
+    await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { timeout: 300000 });
+    console.log("Connexion réussie !");
+    await saveSession(context, email);
+    await browser.close();
+    res.send('Connexion réussie et session sauvegardée !');
+  } catch (err) {
+    console.error("Échec de la connexion :", err);
+    await browser.close();
+    res.status(500).send("Échec de la connexion : délai dépassé ou erreur.");
+  }
+});
+
 // Fonction principale de publication
 async function publishOnVinted(adData) {
-  console.log("Début de publishOnVinted avec les données reçues :", adData);
-
   const user = adData.user;
   const listing = adData.listing;
   const credentials = {
@@ -49,44 +71,16 @@ async function publishOnVinted(adData) {
 
   let context;
   if (sessionPath) {
-    console.log("Chargement de la session existante...");
     context = await browser.newContext({ storageState: sessionPath });
   } else {
-    console.log("Aucune session trouvée, création d'une nouvelle session...");
-    context = await browser.newContext();
+    throw new Error("Aucune session existante. Veuillez d'abord vous connecter via /login-manual.");
   }
 
   const page = await context.newPage();
   page.setDefaultTimeout(60000);
 
-  console.log("Navigation vers https://www.vinted.fr/ ...");
   await page.goto('https://www.vinted.fr/');
-  console.log("Page d'accueil Vinted chargée");
-
-  if (!sessionPath) {
-    console.log("Connexion requise car aucune session précédente");
-    const signInButton = page.locator('[data-testid="header--login-button"]');
-    await signInButton.waitFor({ state: 'visible', timeout: 60000 });
-    await page.evaluate(() => {
-      document.querySelector('[data-testid="header--login-button"]').click();
-    });
-
-    await page.waitForSelector('[data-testid="auth-modal--overlay"]', { state: 'visible', timeout: 60000 });
-
-    if (credentials.method === "email") {
-      await page.click('[data-testid="auth-select-type--login-email"]');
-      await page.fill('input[name="email"]', credentials.email);
-      await page.fill('input[name="password"]', credentials.password);
-      await page.click('button[type="submit"]');
-    } else {
-      throw new Error("Méthode de connexion non supportée dans cette version");
-    }
-
-    await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { state: 'visible', timeout: 60000 });
-    await saveSession(context, credentials.email);
-  }
-
-  console.log("Clic sur le bouton 'Vends tes articles'...");
+  await page.waitForSelector('[data-testid="side-bar-sell-btn"]');
   await page.click('[data-testid="side-bar-sell-btn"]');
   await page.waitForSelector('input[name="title"]');
 
@@ -563,13 +557,11 @@ async function publishOnVinted(adData) {
   };
 
   const categoryId = categoryMapping[listing.category];
-  if (!categoryId) {
-    throw new Error("Catégorie inconnue : " + listing.category);
-  }
+  if (!categoryId) throw new Error("Catégorie inconnue : " + listing.category);
   await page.click(`#catalog-${categoryId}`);
 
   const [fileChooser] = await Promise.all([
-    page.waitForFileChooser({ timeout: 60000 }),
+    page.waitForFileChooser(),
     page.click('button:has-text("Ajoute des photos")')
   ]);
   const imageUrls = listing.images;
@@ -580,20 +572,18 @@ async function publishOnVinted(adData) {
   await fileChooser.setFiles(localImagePaths);
 
   await page.click('button[type="submit"]');
-  await page.waitForSelector('text=Ton article est en ligne !', { timeout: 60000 });
-
+  await page.waitForSelector('text=Ton article est en ligne !');
   console.log("Annonce publiée !");
   await browser.close();
 }
 
-// Endpoint API
 app.post('/publish-ad', async (req, res) => {
-  res.status(202).json({ message: "Job de publication reçu et en cours de traitement" });
+  res.status(202).json({ message: "Publication en cours..." });
   publishOnVinted(req.body)
-    .then(() => console.log("Publication terminée avec succès"))
-    .catch((error) => console.error("Erreur lors de la publication :", error));
+    .then(() => console.log("Publication terminée"))
+    .catch(err => console.error("Erreur publication :", err));
 });
 
 app.listen(port, () => {
-  console.log(`Serveur lancé sur le port ${port}`);
+  console.log(`Serveur actif sur le port ${port}`);
 });
