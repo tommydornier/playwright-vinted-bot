@@ -9,7 +9,6 @@ app.use(express.json());
 
 async function handleAppleLogin(page, context, credentials) {
   console.log("Gestion de la connexion via Apple...");
-  // Clique sur "Continuer avec Apple" et attend l'ouverture d'un nouvel onglet
   const [applePage] = await Promise.all([
     context.waitForEvent('page', { timeout: 60000 }),
     page.waitForSelector('button:has-text("Continuer avec Apple")', { state: 'visible', timeout: 60000 }),
@@ -18,28 +17,22 @@ async function handleAppleLogin(page, context, credentials) {
   console.log("Nouvel onglet Apple détecté");
   await applePage.waitForLoadState('domcontentloaded');
 
-  // Remplissage du champ e-mail
   console.log("Attente du champ e-mail dans l'onglet Apple...");
   await applePage.waitForSelector('#account_name_text_field', { timeout: 60000 });
   await applePage.fill('#account_name_text_field', credentials.email);
   await applePage.waitForTimeout(1000);
 
-  // Clique sur le premier bouton "sign-in" pour valider l’e-mail
   let signInButtons = applePage.locator('button#sign-in');
   console.log("Clique sur le premier bouton 'sign-in' (Continuer)...");
   await signInButtons.first().waitFor({ state: 'visible', timeout: 60000 });
   await signInButtons.first().click({ force: true });
-  
-  // Attendre la transition vers le formulaire de mot de passe
   await applePage.waitForTimeout(1000);
 
-  // Remplissage du champ mot de passe
   console.log("Attente du champ mot de passe dans l'onglet Apple...");
   await applePage.waitForSelector('#password_text_field', { timeout: 60000 });
   await applePage.fill('#password_text_field', credentials.password);
   await applePage.waitForTimeout(1000);
 
-  // Recréer le locator pour récupérer le bouton de confirmation mis à jour
   signInButtons = applePage.locator('button#sign-in');
   console.log("Recherche du bouton 'sign-in' pour se connecter...");
   await signInButtons.first().waitFor({ state: 'visible', timeout: 60000 });
@@ -54,7 +47,6 @@ async function handleAppleLogin(page, context, credentials) {
 async function publishOnVinted(adData) {
   console.log("Début de publishOnVinted avec les données reçues :", adData);
 
-  // Extraire les données du JSON envoyé par Jarvis
   const user = adData.user;
   const listing = adData.listing;
 
@@ -537,7 +529,7 @@ async function publishOnVinted(adData) {
   const imageUrls = listing.images;
 
   const credentials = {
-    method: user.authProvider,  // "email", "apple", "google", "facebook"
+    method: user.authProvider,
     email: user.email,
     password: user.password
   };
@@ -597,6 +589,9 @@ async function publishOnVinted(adData) {
     } else {
       throw new Error("Méthode de connexion non supportée : " + credentials.method);
     }
+
+    console.log("Ajout d'un délai de 5 secondes avant de chercher le bouton 'Vends tes articles'...");
+    await page.waitForTimeout(5000);
 
     console.log("Attente que le bouton 'Vends tes articles' soit visible...");
     await page.waitForSelector('[data-testid="side-bar-sell-btn"]', { state: 'visible', timeout: 60000 });
